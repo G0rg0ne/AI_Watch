@@ -1,0 +1,167 @@
+# AI Watch - AlphaSignal News Agent
+
+Daily AI/ML news agent that monitors the [AlphaSignal archive](https://alphasignal.ai/archive), detects new newsletter publications, extracts headlines and summaries, generates an OpenAI digest, and emails it via SMTP only when a new publication is found.
+
+## Technology Stack
+
+| Component | Technology |
+|-----------|------------|
+| Runtime | Python 3.11 |
+| API / Health | FastAPI + Uvicorn |
+| Scheduler | APScheduler (internal daily cron) |
+| Web retrieval | Tavily |
+| Summarization | OpenAI |
+| Observability | LangSmith |
+| Memory | SQLite (persistent dedup) |
+| Email | Generic SMTP |
+| Packaging | Docker |
+
+## Project Structure
+
+```
+AI_Watch/
+├── backend/
+│   ├── app/
+│   │   ├── core/config.py          # Environment settings
+│   │   ├── db/database.py            # SQLite engine
+│   │   ├── models/seen_publication.py
+│   │   ├── services/alphasignal/   # Agent services
+│   │   ├── jobs/                   # Scheduler + daily job
+│   │   └── main.py                 # Health API
+│   └── requirements.txt
+├── shared/schemas/alphasignal.py   # Shared Pydantic models
+├── tests/backend/                  # Unit tests
+├── Dockerfile
+├── docker-compose.yml
+├── .env.example
+├── README.md
+└── DEVELOPMENT.md
+```
+
+## How It Works
+
+1. **Daily scheduler** triggers the agent at the configured UTC time.
+2. **Tavily** fetches the AlphaSignal archive page.
+3. **Archive parser** extracts publication title, URL, and datetime from each row.
+4. **Memory (SQLite)** checks whether the newest publication was already processed.
+5. If new, **Tavily** fetches the newsletter page.
+6. **Newsletter parser** extracts highlight titles, detailed summaries/resumes, and detail links.
+7. **OpenAI** generates an email-ready digest.
+8. **SMTP** sends the email and the publication is stored in memory.
+
+Emails are **not** sent when the latest publication was already seen.
+
+## Setup
+
+### 1. Clone and configure environment
+
+```bash
+cp .env.example .env
+# Edit .env with your API keys and SMTP credentials
+```
+
+### 2. Local development (without Docker)
+
+```bash
+python -m venv .venv
+.venv\Scripts\activate        # Windows
+pip install -r backend/requirements.txt
+```
+
+Create a local data directory for SQLite:
+
+```bash
+mkdir data
+```
+
+Set `DATABASE_URL=sqlite:///./data/ai_watch.db` in `.env` for local runs (Docker uses `/data`).
+
+Run once manually:
+
+```bash
+python -m backend.app.jobs.run_daily_alphasignal
+```
+
+Run with scheduler + health API:
+
+```bash
+python -m backend.app.jobs.scheduler
+```
+
+### 3. Docker (recommended)
+
+```bash
+docker compose up --build
+```
+
+Health check: [http://localhost:8000/health](http://localhost:8000/health)
+
+Manual trigger (testing):
+
+```bash
+curl -X POST http://localhost:8000/run-now
+```
+
+### 4. Push to Docker Hub
+
+```bash
+docker build -t YOUR_DOCKERHUB_USER/ai-watch:latest .
+docker push YOUR_DOCKERHUB_USER/ai-watch:latest
+```
+
+Deploy the image with `.env` secrets injected at runtime and a persistent volume mounted at `/data`.
+
+## Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `OPENAI_API_KEY` | Yes | OpenAI API key |
+| `OPENAI_MODEL` | No | Model name (default: `gpt-4o-mini`) |
+| `TAVILY_API_KEY` | Yes | Tavily API key |
+| `LANGCHAIN_TRACING_V2` | No | Enable LangSmith tracing (default: `true`) |
+| `LANGCHAIN_API_KEY` | No | LangSmith API key |
+| `LANGCHAIN_PROJECT` | No | LangSmith project name |
+| `LANGCHAIN_ENDPOINT` | No | LangSmith endpoint |
+| `ALPHASIGNAL_ARCHIVE_URL` | No | Archive URL (default: AlphaSignal archive) |
+| `DATABASE_URL` | No | SQLite URL (default: `/data/ai_watch.db` in Docker) |
+| `SMTP_HOST` | Yes | SMTP server host |
+| `SMTP_PORT` | No | SMTP port (default: `587`) |
+| `SMTP_USER` | Yes | SMTP username |
+| `SMTP_PASSWORD` | Yes | SMTP password |
+| `SMTP_USE_TLS` | No | Use STARTTLS (default: `true`) |
+| `EMAIL_FROM` | Yes | Sender email address |
+| `EMAIL_TO` | Yes | Recipient email address |
+| `RUN_HOUR_UTC` | No | Daily run hour UTC (default: `8`) |
+| `RUN_MINUTE_UTC` | No | Daily run minute UTC (default: `0`) |
+| `RUN_ON_STARTUP` | No | Run immediately on container start (default: `false`) |
+| `APP_HOST` | No | Health API host (default: `0.0.0.0`) |
+| `APP_PORT` | No | Health API port (default: `8000`) |
+
+## API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/health` | Health check and next scheduled run |
+| `POST` | `/run-now` | Manually trigger one agent run |
+
+Interactive docs: [http://localhost:8000/docs](http://localhost:8000/docs)
+
+## Testing
+
+```bash
+pip install -r backend/requirements.txt
+pytest
+```
+
+Tests cover archive parsing, newsletter parsing, memory deduplication, and agent skip/process flows (mocked Tavily, OpenAI, SMTP).
+
+## Deployment Notes
+
+- Mount a persistent volume at `/data` so publication memory survives restarts.
+- Inject secrets via environment variables or a secrets manager; never bake them into the image.
+- LangSmith traces are available when `LANGCHAIN_API_KEY` is set.
+- Set `RUN_ON_STARTUP=true` if you want an immediate run when the container starts.
+
+## Recent Changes
+
+See [DEVELOPMENT.md](DEVELOPMENT.md) for the development log and changelog.
