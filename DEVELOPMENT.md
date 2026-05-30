@@ -205,3 +205,41 @@ None
 
 ### Next Steps
 - Trigger a non-skipped agent run and confirm the LangSmith trace shows an LLM child run with `usage_metadata` and `OPENAI_MODEL`
+
+## [2026-05-30 23:15] - REFACTOR
+
+### Changes
+- Removed Tavily dependency and `TAVILY_API_KEY` configuration
+- Replaced `AlphaSignalTavilyClient` / `tavily_client.py` with `AlphaSignalClient` / `alphasignal_client.py` (direct `httpx` only)
+- Renamed `sanitize_tavily_json()` to `sanitize_json_payload()` in archive parser
+- Updated agent constructor injection from `tavily_client` to `alphasignal_client`
+- Newsletter fetch now requires a resolvable `/email/{campaign_id}` URL; raises `ValueError` otherwise
+- Updated tests, README, `.env.example`, and cursor rules to reflect direct API retrieval
+
+### Files Modified
+- `backend/app/services/alphasignal/alphasignal_client.py` (new)
+- `backend/app/services/alphasignal/tavily_client.py` (removed)
+- `backend/app/services/alphasignal/agent.py`
+- `backend/app/services/alphasignal/archive_parser.py`
+- `backend/app/services/alphasignal/newsletter_parser.py`
+- `backend/app/core/config.py`
+- `backend/requirements.txt`
+- `tests/conftest.py`
+- `tests/backend/test_summarizer.py`
+- `tests/backend/test_alphasignal_memory.py`
+- `.env.example`
+- `README.md`
+- `.cursor/rules/project-context.mdc`
+- `.cursor/rules/backend-services.mdc`
+- `.cursor/rules/python-agent-standards.mdc`
+
+### Rationale
+The daily agent path already used AlphaSignal JSON APIs via `httpx`; Tavily was unused fallback code, an extra paid dependency, and misleading naming/documentation.
+
+### Breaking Changes
+- `TAVILY_API_KEY` is no longer read; remove it from `.env` and deployment secrets.
+- Code injecting `tavily_client=` must use `alphasignal_client=` instead.
+
+### Next Steps
+- Remove `TAVILY_API_KEY` from local `.env` and any deployment secret stores
+- Rebuild Docker image after `pip install` without `tavily-python`

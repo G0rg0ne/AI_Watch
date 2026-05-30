@@ -87,18 +87,18 @@ def test_agent_skips_when_publication_already_seen(db_session) -> None:
         '<a href="/newsletter/a"><div>Already seen 5/29/2026, 12:00:00 PM</div></a>'
     )
 
-    tavily = MagicMock()
-    tavily.fetch_archive_listing.return_value = archive_html
+    alphasignal = MagicMock()
+    alphasignal.fetch_archive_listing.return_value = archive_html
 
     memory = PublicationMemory(db_session)
     memory.mark_seen(entry)
 
-    agent = AlphaSignalAgent(db_session, tavily_client=tavily)
+    agent = AlphaSignalAgent(db_session, alphasignal_client=alphasignal)
     result = agent.run()
 
     assert result.status == "skipped"
     assert result.email_sent is False
-    tavily.fetch_newsletter_content.assert_not_called()
+    alphasignal.fetch_newsletter_content.assert_not_called()
 
 
 @patch("backend.app.services.alphasignal.agent.SmtpEmailSender")
@@ -122,9 +122,9 @@ def test_agent_processes_new_publication(
     https://example.com/story
     """
 
-    tavily = MagicMock()
-    tavily.fetch_archive_listing.return_value = archive_html
-    tavily.fetch_newsletter_content.return_value = newsletter_content
+    alphasignal = MagicMock()
+    alphasignal.fetch_archive_listing.return_value = archive_html
+    alphasignal.fetch_newsletter_content.return_value = newsletter_content
 
     summarizer = MagicMock()
     summarizer.summarize.return_value = "Executive summary"
@@ -134,7 +134,7 @@ def test_agent_processes_new_publication(
     email_sender = MagicMock()
     mock_email_sender_cls.return_value = email_sender
 
-    agent = AlphaSignalAgent(db_session, tavily_client=tavily)
+    agent = AlphaSignalAgent(db_session, alphasignal_client=alphasignal)
     result = agent.run()
 
     assert result.status == "processed"

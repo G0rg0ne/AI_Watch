@@ -14,13 +14,11 @@ alwaysApply: false
 4. Wire into `AlphaSignalAgent` in `agent.py` via constructor injection (so tests can mock it).
 5. Add the corresponding Pydantic schema to `shared/schemas/alphasignal.py` if new data types are needed.
 
-## Tavily client
+## AlphaSignal client
 
 ```python
-# Fetch and normalize
-response = self.tavily.search_archive()          # archive page
-content  = self.tavily.get_extracted_html(response)  # HTML preferred
-content  = self.tavily.get_extracted_content(response)  # text fallback
+archive_json = self.alphasignal.fetch_archive_listing()
+newsletter_html = self.alphasignal.fetch_newsletter_content(entry.url)
 ```
 
 ## PublicationMemory (dedup)
@@ -51,7 +49,7 @@ All `@traceable_step` decorators are no-ops when `langsmith` is not installed.
 ```python
 agent = AlphaSignalAgent(
     db=db_session,
-    tavily_client=mock_tavily,
+    alphasignal_client=mock_alphasignal,
     summarizer=mock_summarizer,
     email_sender=mock_email,
 )

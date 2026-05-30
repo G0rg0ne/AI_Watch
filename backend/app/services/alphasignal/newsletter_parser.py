@@ -144,7 +144,7 @@ def parse_newsletter_from_blocks(
 
 
 def parse_newsletter_plaintext(archive_entry: ArchiveEntry, content: str) -> NewsletterDigest:
-    """Parse newsletter content from plain text/markdown-like Tavily output."""
+    """Parse newsletter content from plain text or markdown-like output."""
     lines = [line.strip() for line in content.splitlines() if line.strip()]
     highlights: list[NewsItem] = []
     detailed_items: list[NewsItem] = []

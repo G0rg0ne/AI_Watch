@@ -12,7 +12,7 @@ Daily Python worker that scans the AlphaSignal archive, detects new newsletter p
 | Layer | Technology |
 |-------|------------|
 | Language | Python 3.11 |
-| Web retrieval | Tavily |
+| Web retrieval | httpx (AlphaSignal JSON APIs) |
 | Summarization | OpenAI (configurable model, default `gpt-4o-mini`) |
 | Observability | LangSmith (`@traceable_step`) |
 | Memory / dedup | SQLite via SQLAlchemy |
@@ -25,11 +25,11 @@ Daily Python worker that scans the AlphaSignal archive, detects new newsletter p
 
 ```
 APScheduler (daily) → AlphaSignalAgent.run()
-  → Tavily: fetch archive page
+  → httpx: fetch archive JSON API
   → archive_parser: extract title + URL + published_at from each row
   → PublicationMemory.find_latest_unseen()   ← SQLite dedup
      ├─ Already seen → return status=skipped, no email
-     └─ New → Tavily: fetch newsletter page
+     └─ New → httpx: fetch newsletter JSON API
               → newsletter_parser: highlights + detailed items + links
               → NewsletterSummarizer (OpenAI)
               → SmtpEmailSender
@@ -53,7 +53,7 @@ backend/app/
       memory.py           # PublicationMemory (SQLite)
       summarizer.py       # OpenAI
       email_sender.py     # SMTP
-      tavily_client.py
+      alphasignal_client.py
   jobs/
     scheduler.py          # APScheduler + FastAPI startup
     run_daily_alphasignal.py  # one-shot CLI entrypoint

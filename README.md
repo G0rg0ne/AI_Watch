@@ -9,7 +9,7 @@ Daily AI/ML news agent that monitors the [AlphaSignal archive](https://alphasign
 | Runtime | Python 3.11 |
 | API / Health | FastAPI + Uvicorn |
 | Scheduler | APScheduler (internal daily cron) |
-| Web retrieval | Tavily |
+| Web retrieval | httpx (AlphaSignal JSON APIs) |
 | Summarization | OpenAI |
 | Observability | LangSmith |
 | Memory | SQLite (persistent dedup) |
@@ -41,10 +41,10 @@ AI_Watch/
 ## How It Works
 
 1. **Daily scheduler** triggers the agent at the configured UTC time.
-2. **httpx** fetches the AlphaSignal archive JSON API directly (Tavily markdown-escapes JSON and breaks parsing).
+2. **httpx** fetches the AlphaSignal archive JSON API.
 3. **Archive parser** extracts publication title, URL, and datetime from each row.
 4. **Memory (SQLite)** checks whether the newest publication was already processed.
-5. If new, **Tavily** fetches the newsletter page.
+5. If new, **httpx** fetches the newsletter JSON API (`/api/archive/{campaign_id}`) and unwraps embedded HTML.
 6. **Newsletter parser** extracts highlight titles, detailed summaries/resumes, and detail links.
 7. **LangSmith** supplies the summarization chat prompt; **OpenAI** generates an email-ready digest.
 8. **SMTP** sends the email and the publication is stored in memory.
@@ -162,7 +162,6 @@ The top-level `alphasignal_agent_run` trace includes a `trigger` input so runs a
 |----------|----------|-------------|
 | `OPENAI_API_KEY` | Yes | OpenAI API key |
 | `OPENAI_MODEL` | No | Model name (default: `gpt-4o-mini`) |
-| `TAVILY_API_KEY` | Yes | Tavily API key |
 | `LANGCHAIN_TRACING_V2` | No | Enable LangSmith tracing (default: `true`) |
 | `LANGCHAIN_API_KEY` | No | LangSmith API key |
 | `LANGCHAIN_PROJECT` | No | LangSmith project name |
@@ -201,7 +200,7 @@ pip install -r backend/requirements.txt
 pytest
 ```
 
-Tests cover archive parsing, newsletter parsing, summarizer OpenAI calls, memory deduplication, and agent skip/process flows (mocked Tavily, OpenAI, SMTP).
+Tests cover archive parsing, newsletter parsing, summarizer OpenAI calls, memory deduplication, and agent skip/process flows (mocked AlphaSignal client, OpenAI, SMTP).
 
 ## Deployment Notes
 

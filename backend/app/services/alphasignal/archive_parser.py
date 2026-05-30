@@ -117,8 +117,8 @@ def parse_api_timestamp(raw_timestamp: str) -> datetime:
     return published_at
 
 
-def sanitize_tavily_json(content: str) -> str:
-    """Undo markdown escaping Tavily sometimes adds to extracted JSON payloads."""
+def sanitize_json_payload(content: str) -> str:
+    """Undo markdown-style escaping (e.g. `\\_`) that can break JSON parsing."""
     if not content.strip().startswith("{"):
         return content
     return content.replace("\\_", "_")
@@ -129,7 +129,7 @@ def parse_archive_api_json(
     base_url: str = ARCHIVE_BASE_URL,
 ) -> list[ArchiveEntry]:
     """Parse archive entries from the AlphaSignal JSON API response."""
-    payload = json.loads(sanitize_tavily_json(content))
+    payload = json.loads(sanitize_json_payload(content))
     items = payload.get("data") or []
     entries: list[ArchiveEntry] = []
 

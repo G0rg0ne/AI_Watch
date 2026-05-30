@@ -10,7 +10,6 @@ if str(ROOT) not in sys.path:
 
 # Minimal env defaults so Settings validation succeeds during tests.
 os.environ.setdefault("OPENAI_API_KEY", "test-openai-key")
-os.environ.setdefault("TAVILY_API_KEY", "test-tavily-key")
 os.environ.setdefault("SMTP_HOST", "smtp.test.local")
 os.environ.setdefault("SMTP_USER", "test-user")
 os.environ.setdefault("SMTP_PASSWORD", "test-password")

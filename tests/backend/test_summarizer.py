@@ -16,7 +16,6 @@ def _test_settings(**overrides: object) -> Settings:
     base = {
         "openai_api_key": "test-openai-key",
         "openai_model": "gpt-4o-mini",
-        "tavily_api_key": "test-tavily-key",
         "smtp_host": "smtp.test.local",
         "smtp_user": "test-user",
         "smtp_password": "test-password",

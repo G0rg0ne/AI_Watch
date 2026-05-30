@@ -19,9 +19,6 @@ class Settings(BaseSettings):
     openai_api_key: str
     openai_model: str = "gpt-4o-mini"
 
-    # Tavily
-    tavily_api_key: str
-
     # LangSmith
     langchain_tracing_v2: bool = True
     langchain_api_key: str | None = None

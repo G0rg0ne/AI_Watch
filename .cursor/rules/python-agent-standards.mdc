@@ -60,5 +60,5 @@ def my_step(self, ...):
 
 ## Tests
 
-- Mock Tavily, OpenAI, SMTP, and LangSmith — no live network in tests.
+- Mock AlphaSignal client, OpenAI, SMTP, and LangSmith — no live network in tests.
 - Use `pytest` fixtures; prefer `unittest.mock.MagicMock` / `patch`.
