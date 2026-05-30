@@ -1,0 +1,64 @@
+---
+description: Python coding standards for the AI Watch agent codebase
+globs: **/*.py
+alwaysApply: false
+---
+
+# Python Standards — AI Watch
+
+## Type hints and imports
+
+- Use `from __future__ import annotations` at top of every module.
+- Type-hint all function signatures; use `X | None` not `Optional[X]`.
+- Prefer `list[X]`, `dict[K, V]` over `List`, `Dict` (Python 3.10+).
+
+## Pydantic models
+
+- Always derive from `pydantic.BaseModel`.
+- Use `Field(default_factory=list)` for mutable defaults.
+- Use `.model_dump()` not `.dict()`.
+
+## Logging
+
+```python
+# ✅ Good
+import logging
+logger = logging.getLogger(__name__)
+logger.info("Processing entry: %s", entry.url)
+
+# ❌ Bad
+print("Processing:", entry.url)
+```
+
+## LangSmith tracing
+
+Every service method that calls an external API or makes a meaningful decision must be decorated:
+
+```python
+from backend.app.services.tracing import traceable_step
+
+@traceable_step("step_name")
+def my_step(self, ...):
+    ...
+```
+
+## Error handling
+
+- Raise specific exceptions or `RuntimeError` with a clear message; never silently swallow.
+- Use `logger.exception(...)` (not `logger.error(...)`) inside except blocks that re-raise.
+
+## Secrets
+
+- Never hardcode API keys, passwords, or tokens.
+- Always read from `get_settings()` (pydantic-settings, loads `.env`).
+
+## Database sessions
+
+- Use `get_db()` generator for dependency injection.
+- Never instantiate `SessionLocal()` directly in service code; inject it.
+- Tests: create an in-memory SQLite engine, run `Base.metadata.create_all()`.
+
+## Tests
+
+- Mock Tavily, OpenAI, SMTP, and LangSmith — no live network in tests.
+- Use `pytest` fixtures; prefer `unittest.mock.MagicMock` / `patch`.

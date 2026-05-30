@@ -1,0 +1,74 @@
+---
+description: AI Watch project overview and architecture — always-on context for every session
+alwaysApply: true
+---
+
+# AI Watch — AlphaSignal News Agent
+
+Daily Python worker that scans the AlphaSignal archive, detects new newsletter publications, and emails an AI-generated digest.
+
+## Tech stack
+
+| Layer | Technology |
+|-------|------------|
+| Language | Python 3.11 |
+| Web retrieval | Tavily |
+| Summarization | OpenAI (configurable model, default `gpt-4o-mini`) |
+| Observability | LangSmith (`@traceable_step`) |
+| Memory / dedup | SQLite via SQLAlchemy |
+| Email | Generic SMTP |
+| Scheduler | APScheduler (internal daily cron) |
+| Health API | FastAPI + Uvicorn |
+| Packaging | Docker (persistent `/data` volume for SQLite) |
+
+## Agent pipeline
+
+```
+APScheduler (daily) → AlphaSignalAgent.run()
+  → Tavily: fetch archive page
+  → archive_parser: extract title + URL + published_at from each row
+  → PublicationMemory.find_latest_unseen()   ← SQLite dedup
+     ├─ Already seen → return status=skipped, no email
+     └─ New → Tavily: fetch newsletter page
+              → newsletter_parser: highlights + detailed items + links
+              → NewsletterSummarizer (OpenAI)
+              → SmtpEmailSender
+              → PublicationMemory.mark_seen()
+  → LangSmith traces every step via @traceable_step
+```
+
+## Directory layout
+
+```
+backend/app/
+  core/config.py          # pydantic-settings, all env vars
+  db/database.py          # SQLAlchemy engine (lazy, cached)
+  models/seen_publication.py
+  services/
+    tracing.py            # configure_langsmith(), @traceable_step
+    alphasignal/
+      agent.py            # AlphaSignalAgent orchestrator
+      archive_parser.py   # parse archive rows
+      newsletter_parser.py
+      memory.py           # PublicationMemory (SQLite)
+      summarizer.py       # OpenAI
+      email_sender.py     # SMTP
+      tavily_client.py
+  jobs/
+    scheduler.py          # APScheduler + FastAPI startup
+    run_daily_alphasignal.py  # one-shot CLI entrypoint
+  main.py                 # GET /health  POST /run-now
+shared/schemas/alphasignal.py  # ArchiveEntry, NewsItem, NewsletterDigest, RunResult
+tests/backend/
+Dockerfile / docker-compose.yml
+.env.example
+```
+
+## Key conventions
+
+- All secrets come from `.env` / environment; never hardcode them.
+- `DATABASE_URL=sqlite:////data/ai_watch.db` inside Docker; mount `./data:/data`.
+- Dedup key = `sha256(url | title | published_at.isoformat())`.
+- Every new service step must be wrapped with `@traceable_step("step_name")`.
+- Archive row format: `🤖 Title text MM/DD/YYYY, H:MM:SS PM`
+- `RUN_ON_STARTUP=true` triggers an immediate run when the container starts.

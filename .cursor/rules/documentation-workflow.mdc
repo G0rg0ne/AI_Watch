@@ -1,0 +1,53 @@
+---
+description: Mandatory documentation update workflow after every change to the AI Watch project
+alwaysApply: true
+---
+
+# Documentation Workflow
+
+After **any** code change, always update both living documents.
+
+## README.md — update when
+
+- New env variable added or renamed
+- New API endpoint added
+- New service or pipeline step introduced
+- Docker/deployment instructions change
+- Dependencies change
+
+## DEVELOPMENT.md — append after every task
+
+Use this format exactly:
+
+```markdown
+## [YYYY-MM-DD HH:MM] - TYPE
+
+### Changes
+- Bullet list of what changed
+
+### Files Modified
+- `path/to/file.py`
+
+### Rationale
+Why this change was made
+
+### Breaking Changes
+None  (or describe)
+
+### Next Steps
+What to do next  (optional)
+```
+
+**TYPE** is one of: `FEATURE` | `BUGFIX` | `REFACTOR` | `CONFIG` | `DOCS`
+
+## .env.example — update when
+
+Any new environment variable is added to `backend/app/core/config.py`.
+Always add a commented example value; never a real secret.
+
+## Checklist before finishing a task
+
+- [ ] README updated (new features, endpoints, env vars)
+- [ ] DEVELOPMENT.md entry appended
+- [ ] .env.example updated (if new vars)
+- [ ] No secrets committed

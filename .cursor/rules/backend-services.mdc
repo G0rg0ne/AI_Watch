@@ -1,0 +1,59 @@
+---
+description: Patterns for adding and modifying AlphaSignal agent services
+globs: backend/app/services/**/*.py
+alwaysApply: false
+---
+
+# Backend Service Patterns
+
+## Adding a new service to the pipeline
+
+1. Create `backend/app/services/alphasignal/my_service.py`.
+2. Define a class with `__init__(self, settings: Settings | None = None)`.
+3. Wrap public methods with `@traceable_step("descriptive_step_name")`.
+4. Wire into `AlphaSignalAgent` in `agent.py` via constructor injection (so tests can mock it).
+5. Add the corresponding Pydantic schema to `shared/schemas/alphasignal.py` if new data types are needed.
+
+## Tavily client
+
+```python
+# Fetch and normalize
+response = self.tavily.search_archive()          # archive page
+content  = self.tavily.get_extracted_html(response)  # HTML preferred
+content  = self.tavily.get_extracted_content(response)  # text fallback
+```
+
+## PublicationMemory (dedup)
+
+```python
+memory = PublicationMemory(db)
+unseen = memory.find_latest_unseen(archive_entries)  # returns ArchiveEntry | None
+if unseen:
+    # ... process ...
+    memory.mark_seen(unseen)
+```
+
+Dedup key is a SHA-256 of `url|title|published_at`; collision-safe across restarts.
+
+## Newsletter parsing
+
+`parse_newsletter(archive_entry, content)` handles both HTML and plain text.
+It returns a `NewsletterDigest` with `.highlights` and `.detailed_items`.
+Each `NewsItem` has `.title`, `.summary`, `.detail_url`, `.section`.
+
+## LangSmith tracing
+
+`configure_langsmith(settings)` must be called once per run (already done inside `AlphaSignalAgent.run()`).
+All `@traceable_step` decorators are no-ops when `langsmith` is not installed.
+
+## Injecting services in tests
+
+```python
+agent = AlphaSignalAgent(
+    db=db_session,
+    tavily_client=mock_tavily,
+    summarizer=mock_summarizer,
+    email_sender=mock_email,
+)
+result = agent.run()
+```
