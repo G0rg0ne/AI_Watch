@@ -43,12 +43,11 @@ class AlphaSignalAgent:
         configure_langsmith(self.settings)
         logger.info("Starting AlphaSignal agent run")
 
-        archive_response = self.tavily.search_archive()
-        archive_content = self.tavily.get_extracted_html(archive_response)
-        if not archive_content.strip():
-            archive_content = self.tavily.get_extracted_content(archive_response)
-
-        archive_entries = parse_archive_entries(archive_content)
+        archive_content = self.tavily.fetch_archive_listing()
+        archive_entries = parse_archive_entries(
+            archive_content,
+            base_url=self.settings.alphasignal_base_url,
+        )
         if not archive_entries:
             return RunResult(
                 status="error",
@@ -62,10 +61,7 @@ class AlphaSignalAgent:
                 message="Latest publication already processed. No email sent.",
             )
 
-        newsletter_response = self.tavily.fetch_newsletter(unseen_entry.url)
-        newsletter_content = self.tavily.get_extracted_html(newsletter_response)
-        if not newsletter_content.strip():
-            newsletter_content = self.tavily.get_extracted_content(newsletter_response)
+        newsletter_content = self.tavily.fetch_newsletter_content(unseen_entry.url)
 
         digest = parse_newsletter(unseen_entry, newsletter_content)
         summary = self.summarizer.summarize(digest)

@@ -29,7 +29,9 @@ class Settings(BaseSettings):
     langchain_endpoint: str = "https://api.smith.langchain.com"
 
     # AlphaSignal
+    alphasignal_base_url: str = "https://alphasignal.ai"
     alphasignal_archive_url: str = "https://alphasignal.ai/archive"
+    alphasignal_archive_api_url: str = "https://alphasignal.ai/api/archive?page=1&limit=10"
 
     # Database
     database_url: str = "sqlite:////data/ai_watch.db"

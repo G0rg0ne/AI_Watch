@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import re
 from datetime import datetime
@@ -14,6 +15,7 @@ from shared.schemas.alphasignal import ArchiveEntry
 logger = logging.getLogger(__name__)
 
 ARCHIVE_BASE_URL = "https://alphasignal.ai"
+ARCHIVE_API_PATH = "/api/archive"
 DATE_PATTERN = re.compile(
     r"(?P<date>\d{1,2}/\d{1,2}/\d{4},\s*\d{1,2}:\d{2}:\d{2}\s*[AP]M)\s*$",
     re.IGNORECASE,
@@ -88,6 +90,76 @@ def normalize_archive_url(href: str, base_url: str = ARCHIVE_BASE_URL) -> str:
     return urljoin(base_url, href)
 
 
+def build_email_url(campaign_id: str, base_url: str = ARCHIVE_BASE_URL) -> str:
+    """Build the public newsletter URL from an AlphaSignal campaign id."""
+    return urljoin(base_url, f"/email/{campaign_id}")
+
+
+def build_newsletter_api_url(campaign_id: str, base_url: str = ARCHIVE_BASE_URL) -> str:
+    """Build the JSON API URL for one newsletter publication."""
+    return urljoin(base_url, f"{ARCHIVE_API_PATH}/{campaign_id}")
+
+
+def extract_campaign_id(newsletter_url: str) -> str | None:
+    """Extract a campaign id from an AlphaSignal /email/{id} URL."""
+    match = re.search(r"/email/([A-Za-z0-9]+)", newsletter_url)
+    if match:
+        return match.group(1)
+    return None
+
+
+def parse_api_timestamp(raw_timestamp: str) -> datetime:
+    """Parse ISO timestamps returned by the AlphaSignal archive API."""
+    normalized = raw_timestamp.replace("Z", "+00:00")
+    published_at = datetime.fromisoformat(normalized)
+    if published_at.tzinfo is not None:
+        published_at = published_at.replace(tzinfo=None)
+    return published_at
+
+
+def sanitize_tavily_json(content: str) -> str:
+    """Undo markdown escaping Tavily sometimes adds to extracted JSON payloads."""
+    if not content.strip().startswith("{"):
+        return content
+    return content.replace("\\_", "_")
+
+
+def parse_archive_api_json(
+    content: str,
+    base_url: str = ARCHIVE_BASE_URL,
+) -> list[ArchiveEntry]:
+    """Parse archive entries from the AlphaSignal JSON API response."""
+    payload = json.loads(sanitize_tavily_json(content))
+    items = payload.get("data") or []
+    entries: list[ArchiveEntry] = []
+
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        campaign_id = item.get("as_campaign_id")
+        subject = item.get("subject")
+        timestamp = item.get("timestamp")
+        if not campaign_id or not subject or not timestamp:
+            continue
+        try:
+            published_at = parse_api_timestamp(str(timestamp))
+        except ValueError as exc:
+            logger.debug("Skipping API archive row: %s", exc)
+            continue
+        entries.append(
+            ArchiveEntry(
+                title=str(subject).strip(),
+                url=build_email_url(str(campaign_id), base_url),
+                published_at=published_at,
+                raw_text=str(subject).strip(),
+            )
+        )
+
+    sorted_entries = sorted(entries, key=lambda item: item.published_at, reverse=True)
+    logger.info("Parsed %d archive entries from API JSON", len(sorted_entries))
+    return sorted_entries
+
+
 def parse_archive_entry_from_text(href: str, text: str) -> ArchiveEntry | None:
     """Parse one archive row from link href and visible text."""
     try:
@@ -99,23 +171,33 @@ def parse_archive_entry_from_text(href: str, text: str) -> ArchiveEntry | None:
     return ArchiveEntry(title=title, url=url, published_at=published_at, raw_text=text)
 
 
-def parse_archive_entries(content: str) -> list[ArchiveEntry]:
+def parse_archive_entries(content: str, base_url: str = ARCHIVE_BASE_URL) -> list[ArchiveEntry]:
     """
-    Parse archive entries from HTML or plain text content.
+    Parse archive entries from API JSON, HTML, or plain text content.
 
-    Supports HTML anchor tags and plain-text lines containing a publication date.
+    Supports AlphaSignal API JSON, HTML anchor tags, and plain-text lines
+    containing a publication date.
     """
+    stripped = content.strip()
+    if stripped.startswith("{"):
+        try:
+            api_entries = parse_archive_api_json(stripped, base_url=base_url)
+            if api_entries:
+                return api_entries
+        except json.JSONDecodeError:
+            logger.debug("Content looked like JSON but could not be parsed as archive API data")
+
     entries: list[ArchiveEntry] = []
 
-    if "<a" in content.lower():
+    if "<a" in stripped.lower():
         parser = _ArchiveLinkParser()
-        parser.feed(content)
+        parser.feed(stripped)
         for href, text in parser.entries:
             entry = parse_archive_entry_from_text(href, text)
             if entry:
                 entries.append(entry)
     else:
-        for line in content.splitlines():
+        for line in stripped.splitlines():
             line = line.strip()
             if not line or not DATE_PATTERN.search(line):
                 continue

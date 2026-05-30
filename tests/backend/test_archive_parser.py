@@ -25,6 +25,26 @@ SAMPLE_ARCHIVE_HTML = """
 </div>
 """
 
+SAMPLE_ARCHIVE_API_JSON = """
+{
+  "metadata": {"total_records": 2, "total_pages": 1, "current_page": 1, "limit": 10},
+  "data": [
+    {
+      "_id": "6a19d414efdf9f012014aead",
+      "subject": "🤖 The solo bot ceiling: why enterprises need a team agent",
+      "timestamp": "2026-05-29T17:59:48.063Z",
+      "as_campaign_id": "976d7dd535070c1c"
+    },
+    {
+      "_id": "6a17cd77442273a576f54e10",
+      "subject": "Older AI newsletter headline",
+      "timestamp": "2026-05-28T05:07:02.362Z",
+      "as_campaign_id": "c04b52394712b3e4"
+    }
+  ]
+}
+"""
+
 
 def test_split_title_and_date() -> None:
     text = "🤖 The solo bot ceiling: why enterprises need a team agent 5/29/2026, 7:59:48 PM"
@@ -44,6 +64,14 @@ def test_parse_archive_entry_from_text() -> None:
 def test_parse_archive_entries_sorts_newest_first() -> None:
     entries = parse_archive_entries(SAMPLE_ARCHIVE_HTML)
     assert len(entries) == 2
+    assert entries[0].published_at > entries[1].published_at
+    assert "solo bot ceiling" in entries[0].title.lower()
+
+
+def test_parse_archive_api_json_builds_email_urls() -> None:
+    entries = parse_archive_entries(SAMPLE_ARCHIVE_API_JSON)
+    assert len(entries) == 2
+    assert entries[0].url == "https://alphasignal.ai/email/976d7dd535070c1c"
     assert entries[0].published_at > entries[1].published_at
     assert "solo bot ceiling" in entries[0].title.lower()
 

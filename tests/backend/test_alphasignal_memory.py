@@ -72,9 +72,7 @@ def test_agent_skips_when_publication_already_seen(db_session) -> None:
     )
 
     tavily = MagicMock()
-    tavily.search_archive.return_value = {"results": [{"raw_content": archive_html}]}
-    tavily.get_extracted_html.return_value = archive_html
-    tavily.get_extracted_content.return_value = archive_html
+    tavily.fetch_archive_listing.return_value = archive_html
 
     memory = PublicationMemory(db_session)
     memory.mark_seen(entry)
@@ -84,7 +82,7 @@ def test_agent_skips_when_publication_already_seen(db_session) -> None:
 
     assert result.status == "skipped"
     assert result.email_sent is False
-    tavily.fetch_newsletter.assert_not_called()
+    tavily.fetch_newsletter_content.assert_not_called()
 
 
 @patch("backend.app.services.alphasignal.agent.SmtpEmailSender")
@@ -109,10 +107,8 @@ def test_agent_processes_new_publication(
     """
 
     tavily = MagicMock()
-    tavily.search_archive.return_value = {"results": [{"raw_content": archive_html}]}
-    tavily.fetch_newsletter.return_value = {"results": [{"raw_content": newsletter_content}]}
-    tavily.get_extracted_html.side_effect = lambda response: response["results"][0]["raw_content"]
-    tavily.get_extracted_content.side_effect = lambda response: response["results"][0]["raw_content"]
+    tavily.fetch_archive_listing.return_value = archive_html
+    tavily.fetch_newsletter_content.return_value = newsletter_content
 
     summarizer = MagicMock()
     summarizer.summarize.return_value = "Executive summary"

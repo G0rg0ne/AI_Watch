@@ -78,3 +78,55 @@ None (initial implementation)
 - Add optional Streamlit dashboard for run history
 - Add retry/backoff for transient Tavily or SMTP failures
 - Push image to Docker Hub and configure production secrets/volume
+
+## [2026-05-30 20:35] - BUGFIX
+
+### Changes
+- Switched archive retrieval from the client-rendered `/archive` page to AlphaSignal's JSON API (`/api/archive`)
+- Added JSON archive parsing with `/email/{campaign_id}` canonical publication URLs
+- Resolved newsletter fetches to `/api/archive/{campaign_id}` and unwrap embedded newsletter HTML from API JSON
+- Added `ALPHASIGNAL_BASE_URL` and `ALPHASIGNAL_ARCHIVE_API_URL` settings plus `.env.example`
+
+### Files Modified
+- `backend/app/services/alphasignal/archive_parser.py`
+- `backend/app/services/alphasignal/tavily_client.py`
+- `backend/app/services/alphasignal/agent.py`
+- `backend/app/core/config.py`
+- `tests/backend/test_archive_parser.py`
+- `tests/backend/test_alphasignal_memory.py`
+- `.env.example`
+- `README.md`
+
+### Rationale
+Tavily extract returned zero results for the AlphaSignal archive HTML page because it is a JavaScript SPA shell. The public JSON API returns structured publication metadata that Tavily can extract reliably.
+
+### Breaking Changes
+None for existing SQLite memory; publication URLs now use `/email/{campaign_id}` instead of legacy `/newsletter/{slug}` paths for newly parsed entries.
+
+### Next Steps
+- Rebuild and restart Docker (`docker compose up --build`) to pick up the fix
+
+## [2026-05-30 20:45] - BUGFIX
+
+### Changes
+- Fetch AlphaSignal archive and newsletter JSON via direct `httpx` calls instead of Tavily extract
+- Added `sanitize_tavily_json()` to undo Tavily markdown escaping (`\_`) when JSON payloads are parsed
+- Updated agent tests to mock `fetch_archive_listing()` and `fetch_newsletter_content()`
+- Promoted `httpx` from test-only to runtime dependency
+
+### Files Modified
+- `backend/app/services/alphasignal/tavily_client.py`
+- `backend/app/services/alphasignal/agent.py`
+- `backend/app/services/alphasignal/archive_parser.py`
+- `backend/requirements.txt`
+- `tests/backend/test_alphasignal_memory.py`
+- `README.md`
+
+### Rationale
+Tavily extract returned JSON with invalid markdown escapes (e.g. `total\_records`), causing `json.loads` to fail and the archive parser to report zero entries even after switching to the API URL.
+
+### Breaking Changes
+None
+
+### Next Steps
+- Rebuild Docker and confirm `Parsed 10 archive entries from API JSON` in logs

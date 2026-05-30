@@ -41,7 +41,7 @@ AI_Watch/
 ## How It Works
 
 1. **Daily scheduler** triggers the agent at the configured UTC time.
-2. **Tavily** fetches the AlphaSignal archive page.
+2. **httpx** fetches the AlphaSignal archive JSON API directly (Tavily markdown-escapes JSON and breaks parsing).
 3. **Archive parser** extracts publication title, URL, and datetime from each row.
 4. **Memory (SQLite)** checks whether the newest publication was already processed.
 5. If new, **Tavily** fetches the newsletter page.
@@ -122,7 +122,9 @@ Deploy the image with `.env` secrets injected at runtime and a persistent volume
 | `LANGCHAIN_API_KEY` | No | LangSmith API key |
 | `LANGCHAIN_PROJECT` | No | LangSmith project name |
 | `LANGCHAIN_ENDPOINT` | No | LangSmith endpoint |
-| `ALPHASIGNAL_ARCHIVE_URL` | No | Archive URL (default: AlphaSignal archive) |
+| `ALPHASIGNAL_BASE_URL` | No | AlphaSignal site origin (default: `https://alphasignal.ai`) |
+| `ALPHASIGNAL_ARCHIVE_URL` | No | Public archive page URL (reference only) |
+| `ALPHASIGNAL_ARCHIVE_API_URL` | No | Archive listing API URL (default: `https://alphasignal.ai/api/archive?page=1&limit=10`) |
 | `DATABASE_URL` | No | SQLite URL (default: `/data/ai_watch.db` in Docker) |
 | `SMTP_HOST` | Yes | SMTP server host |
 | `SMTP_PORT` | No | SMTP port (default: `587`) |
