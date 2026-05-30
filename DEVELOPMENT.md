@@ -1,5 +1,60 @@
 # Development Log
 
+## [2026-05-30 23:40] - FEATURE
+
+### Changes
+- Added a `trigger` input to `AlphaSignalAgent.run()` so the top-level LangSmith trace shows why a run started
+- Propagated explicit trigger labels from CLI (`cli`), APScheduler (`scheduler`), startup runs (`startup`), and the manual API endpoint (`manual_api`)
+- Added a focused test for trigger propagation through `run_alphasignal_agent()`
+- Documented LangSmith trace trigger labels in the README
+
+### Files Modified
+- `backend/app/services/alphasignal/agent.py`
+- `backend/app/jobs/run_daily_alphasignal.py`
+- `backend/app/jobs/scheduler.py`
+- `backend/app/main.py`
+- `tests/backend/test_alphasignal_memory.py`
+- `README.md`
+- `DEVELOPMENT.md`
+
+### Rationale
+LangSmith showed an empty input section for `alphasignal_agent_run` because the traced method had no business arguments. Passing a small trigger label makes traces clearer without exposing secrets or large newsletter payloads.
+
+### Breaking Changes
+None
+
+### Next Steps
+- Trigger one run from each entrypoint and confirm the LangSmith `Input` panel shows the expected `trigger` value
+
+## [2026-05-30 23:15] - FEATURE
+
+### Changes
+- Moved AlphaSignal summarizer system/user prompts from hardcoded `SYSTEM_PROMPT` to LangSmith Prompt Hub
+- Added `langsmith_summarizer_prompt` setting (`LANGSMITH_SUMMARIZER_PROMPT`, default `alphasignal-newsletter-summarizer:prod`)
+- `NewsletterSummarizer` pulls a `ChatPromptTemplate` via `langsmith.Client.pull_prompt`, formats `{newsletter_payload}`, and converts messages for OpenAI
+- Added `langchain-core` dependency for LangSmith prompt deserialization
+- Restored `.env.example` with placeholder secrets and new LangSmith prompt variable
+- Extended summarizer tests to mock LangSmith client and verify prompt id + message formatting
+
+### Files Modified
+- `backend/app/core/config.py`
+- `backend/app/services/alphasignal/summarizer.py`
+- `backend/requirements.txt`
+- `tests/backend/test_summarizer.py`
+- `.env.example`
+- `README.md`
+- `DEVELOPMENT.md`
+
+### Rationale
+User requested managing the summarization prompt in LangSmith and loading it at runtime so prompt edits do not require code deploys.
+
+### Breaking Changes
+- Requires `LANGCHAIN_API_KEY` and an existing LangSmith prompt matching `LANGSMITH_SUMMARIZER_PROMPT` before summarization succeeds (no in-code fallback).
+
+### Next Steps
+- Push `alphasignal-newsletter-summarizer` to LangSmith and tag `prod` (or adjust env to match your prompt name)
+- Run agent once to verify `pull_prompt` and OpenAI summary in LangSmith traces
+
 ## [2026-05-30 22:30] - CONFIG
 
 ### Changes

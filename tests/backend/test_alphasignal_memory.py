@@ -8,7 +8,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from backend.app.db.database import Base
-from backend.app.services.alphasignal.agent import AlphaSignalAgent
+from backend.app.services.alphasignal.agent import AlphaSignalAgent, run_alphasignal_agent
 from backend.app.services.alphasignal.archive_parser import parse_archive_entries
 from backend.app.services.alphasignal.memory import PublicationMemory
 from shared.schemas.alphasignal import ArchiveEntry, RunResult
@@ -63,6 +63,22 @@ def test_find_latest_unseen_returns_none_when_all_seen(db_session) -> None:
         memory.mark_seen(entry)
 
     assert memory.find_latest_unseen(entries) is None
+
+
+def test_run_alphasignal_agent_passes_trace_trigger(db_session) -> None:
+    with (
+        patch.object(AlphaSignalAgent, "__init__", return_value=None) as mock_init,
+        patch.object(
+            AlphaSignalAgent,
+            "run",
+            return_value=RunResult(status="skipped", message="No new publication."),
+        ) as mock_run,
+    ):
+        result = run_alphasignal_agent(db_session, trigger="manual_api")
+
+    assert result.status == "skipped"
+    mock_init.assert_called_once_with(db=db_session)
+    mock_run.assert_called_once_with(trigger="manual_api")
 
 
 def test_agent_skips_when_publication_already_seen(db_session) -> None:

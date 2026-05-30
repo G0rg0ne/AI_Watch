@@ -34,7 +34,7 @@ def create_app(scheduler: BackgroundScheduler | None = None) -> FastAPI:
         """Manually trigger the AlphaSignal job (useful for testing)."""
         from backend.app.jobs.run_daily_alphasignal import main as run_job
 
-        exit_code = run_job()
+        exit_code = run_job(trigger="manual_api")
         return {
             "status": "ok" if exit_code == 0 else "error",
             "message": "Job triggered",

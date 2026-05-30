@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     langchain_api_key: str | None = None
     langchain_project: str = "ai-watch-alphasignal"
     langchain_endpoint: str = "https://api.smith.langchain.com"
+    langsmith_summarizer_prompt: str = "alphasignal-newsletter-summarizer:prod"
 
     # AlphaSignal
     alphasignal_base_url: str = "https://alphasignal.ai"

@@ -23,12 +23,17 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def _scheduled_job() -> None:
+def _run_job(trigger: str) -> None:
     """Wrapper invoked by APScheduler."""
-    logger.info("Scheduled AlphaSignal job triggered")
-    exit_code = run_job()
+    logger.info("AlphaSignal job triggered by %s", trigger)
+    exit_code = run_job(trigger=trigger)
     if exit_code != 0:
-        logger.error("Scheduled job completed with errors (exit code %s)", exit_code)
+        logger.error("AlphaSignal job completed with errors (exit code %s)", exit_code)
+
+
+def _scheduled_job() -> None:
+    """Run the daily AlphaSignal job from APScheduler."""
+    _run_job(trigger="scheduler")
 
 
 def start_scheduler() -> BackgroundScheduler:
@@ -63,7 +68,7 @@ def main() -> None:
     scheduler = start_scheduler()
     if settings.run_on_startup:
         logger.info("Running AlphaSignal job immediately on startup")
-        threading.Thread(target=_scheduled_job, daemon=True).start()
+        threading.Thread(target=_run_job, kwargs={"trigger": "startup"}, daemon=True).start()
 
     app = create_app(scheduler=scheduler)
     try:

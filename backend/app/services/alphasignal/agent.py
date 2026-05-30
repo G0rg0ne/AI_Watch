@@ -38,10 +38,10 @@ class AlphaSignalAgent:
         self.email_sender = email_sender or SmtpEmailSender(self.settings)
 
     @traceable_step("alphasignal_agent_run")
-    def run(self) -> RunResult:
+    def run(self, trigger: str = "direct") -> RunResult:
         """Execute one full AlphaSignal check cycle."""
         configure_langsmith(self.settings)
-        logger.info("Starting AlphaSignal agent run")
+        logger.info("Starting AlphaSignal agent run (trigger=%s)", trigger)
 
         archive_content = self.tavily.fetch_archive_listing()
         archive_entries = parse_archive_entries(
@@ -82,7 +82,7 @@ class AlphaSignalAgent:
         )
 
 
-def run_alphasignal_agent(db: Session) -> RunResult:
+def run_alphasignal_agent(db: Session, trigger: str = "direct") -> RunResult:
     """Convenience wrapper to run the agent."""
     agent = AlphaSignalAgent(db=db)
-    return agent.run()
+    return agent.run(trigger=trigger)
