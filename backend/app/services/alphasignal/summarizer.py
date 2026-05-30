@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 
+from langsmith.wrappers import wrap_openai
 from openai import OpenAI
 
 from backend.app.core.config import Settings, get_settings
@@ -26,7 +27,7 @@ class NewsletterSummarizer:
 
     def __init__(self, settings: Settings | None = None) -> None:
         self.settings = settings or get_settings()
-        self.client = OpenAI(api_key=self.settings.openai_api_key)
+        self.client = wrap_openai(OpenAI(api_key=self.settings.openai_api_key))
 
     def _build_user_prompt(self, digest: NewsletterDigest) -> str:
         payload = {

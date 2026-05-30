@@ -155,13 +155,14 @@ pip install -r backend/requirements.txt
 pytest
 ```
 
-Tests cover archive parsing, newsletter parsing, memory deduplication, and agent skip/process flows (mocked Tavily, OpenAI, SMTP).
+Tests cover archive parsing, newsletter parsing, summarizer OpenAI calls, memory deduplication, and agent skip/process flows (mocked Tavily, OpenAI, SMTP).
 
 ## Deployment Notes
 
 - Mount a persistent volume at `/data` so publication memory survives restarts.
 - Inject secrets via environment variables or a secrets manager; never bake them into the image.
 - LangSmith traces are available when `LANGCHAIN_API_KEY` is set.
+- OpenAI calls use LangSmith's `wrap_openai` client wrapper so Monitoring shows **model name** and **token usage** (prompt/completion/total) on LLM runs. Pipeline steps still use `@traceable_step`; only runs that call OpenAI (non-skipped) appear in usage charts.
 - Set `RUN_ON_STARTUP=true` if you want an immediate run when the container starts.
 
 ## Recent Changes

@@ -130,3 +130,23 @@ None
 
 ### Next Steps
 - Rebuild Docker and confirm `Parsed 10 archive entries from API JSON` in logs
+
+## [2026-05-30 22:55] - BUGFIX
+
+### Changes
+- Wrapped the OpenAI SDK client with LangSmith `wrap_openai` in `NewsletterSummarizer` so LLM runs record model and token usage in LangSmith Monitoring
+- Added unit tests for client wrapping, configured model passthrough, and empty-response handling
+
+### Files Modified
+- `backend/app/services/alphasignal/summarizer.py`
+- `tests/backend/test_summarizer.py`
+- `README.md`
+
+### Rationale
+Generic `@traceable` steps logged pipeline activity but not LLM usage metadata; LangSmith Monitoring requires provider-instrumented OpenAI calls to populate token and model metrics.
+
+### Breaking Changes
+None
+
+### Next Steps
+- Trigger a non-skipped agent run and confirm the LangSmith trace shows an LLM child run with `usage_metadata` and `OPENAI_MODEL`
