@@ -41,15 +41,15 @@ AI_Watch/
 ## How It Works
 
 1. **Daily scheduler** triggers the agent at the configured UTC time.
-2. **httpx** fetches the AlphaSignal archive JSON API.
+2. **httpx** fetches the AlphaSignal archive JSON API (paginated when `ALPHASIGNAL_START_DATE` is set for backfill).
 3. **Archive parser** extracts publication title, URL, and datetime from each row.
-4. **Memory (SQLite)** checks whether the newest publication was already processed.
-5. If new, **httpx** fetches the newsletter JSON API (`/api/archive/{campaign_id}`) and unwraps embedded HTML.
+4. **Memory (SQLite)** finds every unseen publication on or after the optional start date.
+5. For each eligible edition (oldest first), **httpx** fetches the newsletter JSON API (`/api/archive/{campaign_id}`) and unwraps embedded HTML.
 6. **Newsletter parser** extracts highlight titles, detailed summaries/resumes, and detail links.
 7. **LangSmith** supplies the summarization chat prompt; **OpenAI** generates an email-ready digest.
-8. **SMTP** sends the email and the publication is stored in memory.
+8. **SMTP** sends one email per edition and each publication is stored in memory only after its email succeeds.
 
-Emails are **not** sent when the latest publication was already seen.
+If multiple new newsletters appeared since the last run, one run sends **one separate email per edition**. Editions before `ALPHASIGNAL_START_DATE` are ignored entirely (no fetch, no email, not marked seen).
 
 ## Setup
 
@@ -170,6 +170,8 @@ The top-level `alphasignal_agent_run` trace includes a `trigger` input so runs a
 | `ALPHASIGNAL_BASE_URL` | No | AlphaSignal site origin (default: `https://alphasignal.ai`) |
 | `ALPHASIGNAL_ARCHIVE_URL` | No | Public archive page URL (reference only) |
 | `ALPHASIGNAL_ARCHIVE_API_URL` | No | Archive listing API URL (default: `https://alphasignal.ai/api/archive?page=1&limit=10`) |
+| `ALPHASIGNAL_ARCHIVE_LIMIT` | No | Page size when paginating archive API for backfill (default: `10`) |
+| `ALPHASIGNAL_START_DATE` | No | Only process editions with `published_at` on/after this date (`YYYY-MM-DD`, UTC date-only). Unset = no cutoff; all unseen editions are eligible |
 | `DATABASE_URL` | No | SQLite URL (default: `/data/ai_watch.db` in Docker) |
 | `SMTP_HOST` | Yes | SMTP server host |
 | `SMTP_PORT` | No | SMTP port (default: `587`) |
@@ -200,7 +202,7 @@ pip install -r backend/requirements.txt
 pytest
 ```
 
-Tests cover archive parsing, newsletter parsing, summarizer OpenAI calls, memory deduplication, and agent skip/process flows (mocked AlphaSignal client, OpenAI, SMTP).
+Tests cover archive parsing, newsletter parsing, summarizer OpenAI calls, memory deduplication, batch multi-edition agent runs, start-date filtering, and agent skip/process flows (mocked AlphaSignal client, OpenAI, SMTP).
 
 ## Deployment Notes
 

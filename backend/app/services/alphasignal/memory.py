@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlalchemy.orm import Session
 
@@ -65,3 +65,28 @@ class PublicationMemory:
                 return entry
         logger.info("No unseen publications found")
         return None
+
+    @traceable_step("memory_find_unseen_since")
+    def find_unseen_since(
+        self,
+        entries: list[ArchiveEntry],
+        start_date: date | None = None,
+    ) -> list[ArchiveEntry]:
+        """Return all unseen entries on/after start_date, oldest first."""
+        eligible: list[ArchiveEntry] = []
+        for entry in entries:
+            if start_date is not None and entry.published_at.date() < start_date:
+                continue
+            if self.is_seen(entry):
+                continue
+            eligible.append(entry)
+
+        eligible.sort(key=lambda item: item.published_at)
+        logger.info(
+            "Found %d eligible unseen publication(s)%s",
+            len(eligible),
+            f" since {start_date.isoformat()}" if start_date else "",
+        )
+        for entry in eligible:
+            logger.info("Eligible unseen publication: %s (%s)", entry.title, entry.published_at)
+        return eligible

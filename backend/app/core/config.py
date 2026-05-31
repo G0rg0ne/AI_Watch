@@ -1,8 +1,9 @@
 """Application settings loaded from environment variables."""
 
+from datetime import date
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -30,6 +31,16 @@ class Settings(BaseSettings):
     alphasignal_base_url: str = "https://alphasignal.ai"
     alphasignal_archive_url: str = "https://alphasignal.ai/archive"
     alphasignal_archive_api_url: str = "https://alphasignal.ai/api/archive?page=1&limit=10"
+    alphasignal_archive_limit: int = Field(default=10, ge=1, le=100)
+    alphasignal_start_date: date | None = None
+
+    @field_validator("alphasignal_start_date", mode="before")
+    @classmethod
+    def empty_start_date_to_none(cls, value: object) -> object:
+        """Treat unset or blank ALPHASIGNAL_START_DATE as no cutoff."""
+        if value is None or value == "":
+            return None
+        return value
 
     # Database
     database_url: str = "sqlite:////data/ai_watch.db"

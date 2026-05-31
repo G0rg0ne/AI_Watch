@@ -41,3 +41,8 @@ class RunResult(BaseModel):
     message: str
     publication_url: str | None = None
     email_sent: bool = False
+    processed_count: int = 0
+    publication_urls: list[str] = Field(default_factory=list)
+    email_sent_count: int = 0
+    failed_count: int = 0
+    failed_publication_urls: list[str] = Field(default_factory=list)

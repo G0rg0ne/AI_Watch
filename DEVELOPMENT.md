@@ -243,3 +243,34 @@ The daily agent path already used AlphaSignal JSON APIs via `httpx`; Tavily was 
 ### Next Steps
 - Remove `TAVILY_API_KEY` from local `.env` and any deployment secret stores
 - Rebuild Docker image after `pip install` without `tavily-python`
+
+## [2026-05-31 23:45] - FEATURE
+
+### Changes
+- Added `ALPHASIGNAL_START_DATE` and `ALPHASIGNAL_ARCHIVE_LIMIT` settings for optional backfill cutoff and archive pagination page size
+- Extended `AlphaSignalClient.fetch_archive_listing()` to paginate archive API pages when a start date is configured
+- Added `PublicationMemory.find_unseen_since()` to return all eligible unseen editions oldest-first
+- Refactored `AlphaSignalAgent.run()` to process every eligible unseen newsletter per run with partial-failure tolerance
+- Extended `RunResult` with batch fields (`processed_count`, `publication_urls`, `email_sent_count`, failure counts/URLs) while keeping existing single-edition fields
+- Added/updated unit tests for memory filtering, multi-edition runs, start-date cutoff, mixed seen/unseen, and partial failure
+- Updated README and created `.env.example` with the new environment variables
+
+### Files Modified
+- `backend/app/core/config.py`
+- `backend/app/services/alphasignal/alphasignal_client.py`
+- `backend/app/services/alphasignal/memory.py`
+- `backend/app/services/alphasignal/agent.py`
+- `shared/schemas/alphasignal.py`
+- `tests/backend/test_alphasignal_memory.py`
+- `.env.example`
+- `README.md`
+
+### Rationale
+The agent previously processed only the newest unseen newsletter per run. Batch processing with an optional start date supports daily catch-up (multiple emails per run) and controlled backfills without touching the existing dedup key format.
+
+### Breaking Changes
+None
+
+### Next Steps
+- Set `ALPHASIGNAL_START_DATE` in `.env` for initial backfill, then leave unset or adjust as needed
+- Rebuild Docker and verify multi-edition runs in logs and LangSmith traces

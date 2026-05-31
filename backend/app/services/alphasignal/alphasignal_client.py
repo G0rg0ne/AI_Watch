@@ -4,13 +4,17 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import date
+from urllib.parse import urljoin
 
 import httpx
 
 from backend.app.core.config import Settings, get_settings
 from backend.app.services.alphasignal.archive_parser import (
+    ARCHIVE_API_PATH,
     build_newsletter_api_url,
     extract_campaign_id,
+    parse_api_timestamp,
     sanitize_json_payload,
 )
 from backend.app.services.tracing import traceable_step
@@ -24,14 +28,88 @@ class AlphaSignalClient:
     def __init__(self, settings: Settings | None = None) -> None:
         self.settings = settings or get_settings()
 
+    def _build_archive_api_url(self, page: int) -> str:
+        """Build a paginated archive API URL from base settings."""
+        base = self.settings.alphasignal_base_url.rstrip("/") + "/"
+        path = f"{ARCHIVE_API_PATH.lstrip('/')}?page={page}&limit={self.settings.alphasignal_archive_limit}"
+        return urljoin(base, path)
+
+    @staticmethod
+    def _page_oldest_date(items: list[dict]) -> date | None:
+        """Return the publication date of the oldest row on an archive page."""
+        oldest: date | None = None
+        for item in items:
+            timestamp = item.get("timestamp")
+            if not timestamp:
+                continue
+            try:
+                published_at = parse_api_timestamp(str(timestamp))
+            except ValueError:
+                continue
+            item_date = published_at.date()
+            if oldest is None or item_date < oldest:
+                oldest = item_date
+        return oldest
+
     @traceable_step("alphasignal_fetch_archive_api")
-    def fetch_archive_listing(self) -> str:
-        """Fetch archive listing JSON from the AlphaSignal API."""
-        url = self.settings.alphasignal_archive_api_url
-        logger.info("Fetching AlphaSignal archive API: %s", url)
-        response = httpx.get(url, timeout=30.0, follow_redirects=True)
+    def fetch_archive_listing(self, start_date: date | None = None) -> str:
+        """Fetch archive listing JSON, paginating when needed for backfill."""
+        first_url = self.settings.alphasignal_archive_api_url
+        logger.info("Fetching AlphaSignal archive API: %s", first_url)
+        response = httpx.get(first_url, timeout=30.0, follow_redirects=True)
         response.raise_for_status()
-        return response.text
+        content = response.text.strip()
+
+        if not content.startswith("{"):
+            return content
+
+        first_payload = json.loads(sanitize_json_payload(content))
+        metadata = first_payload.get("metadata") or {}
+        total_pages = int(metadata.get("total_pages") or 1)
+        all_items: list[dict] = list(first_payload.get("data") or [])
+
+        should_paginate = start_date is not None and total_pages > 1
+        if not should_paginate:
+            return content
+
+        page = 2
+        while page <= total_pages:
+            page_url = self._build_archive_api_url(page)
+            logger.info("Fetching AlphaSignal archive API page %s: %s", page, page_url)
+            page_response = httpx.get(page_url, timeout=30.0, follow_redirects=True)
+            page_response.raise_for_status()
+            page_payload = json.loads(sanitize_json_payload(page_response.text.strip()))
+            page_items = page_payload.get("data") or []
+            if not page_items:
+                break
+
+            all_items.extend(page_items)
+
+            if start_date is not None:
+                oldest_on_page = self._page_oldest_date(page_items)
+                if oldest_on_page is not None and oldest_on_page < start_date:
+                    logger.info(
+                        "Stopping archive pagination at page %s; oldest entry %s is before start date %s",
+                        page,
+                        oldest_on_page,
+                        start_date,
+                    )
+                    break
+
+            page += 1
+
+        merged_payload = {
+            "metadata": {
+                **metadata,
+                "current_page": 1,
+                "total_pages": 1,
+                "limit": len(all_items),
+                "total_records": len(all_items),
+            },
+            "data": all_items,
+        }
+        logger.info("Fetched %d archive entries across paginated API calls", len(all_items))
+        return json.dumps(merged_payload)
 
     @traceable_step("alphasignal_fetch_newsletter_api")
     def fetch_newsletter_content(self, newsletter_url: str) -> str:
