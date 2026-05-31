@@ -31,6 +31,7 @@ AI_Watch/
 │   └── requirements.txt
 ├── shared/schemas/alphasignal.py   # Shared Pydantic models
 ├── tests/backend/                  # Unit tests
+├── .github/workflows/              # CI image publishing
 ├── Dockerfile
 ├── docker-compose.yml
 ├── .env.example
@@ -102,7 +103,33 @@ Manual trigger (testing):
 curl -X POST http://localhost:8000/run-now
 ```
 
-### 4. Push to Docker Hub
+### 4. Publish to Docker Hub
+
+This repository includes a GitHub Actions workflow that builds the self-contained Docker image from `Dockerfile` and pushes it to Docker Hub.
+
+Configure these GitHub repository secrets:
+
+| Secret | Description |
+|--------|-------------|
+| `DOCKERHUB_USERNAME` | Docker Hub username or namespace owner |
+| `DOCKERHUB_TOKEN` | Docker Hub access token with permission to push images |
+
+Optional GitHub repository variable:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DOCKERHUB_REPOSITORY` | `ai-watch` | Docker Hub repository name under `DOCKERHUB_USERNAME` |
+
+The workflow publishes only when a Git tag is pushed. The Docker image uses the same tag name, so pushing `v1.0.0` publishes `YOUR_DOCKERHUB_USER/ai-watch:v1.0.0`.
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+Use Docker-compatible tag names for releases.
+
+Manual local push remains available:
 
 ```bash
 docker build -t YOUR_DOCKERHUB_USER/ai-watch:latest .

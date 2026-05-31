@@ -1,5 +1,27 @@
 # Development Log
 
+## [2026-05-31 23:45] - CONFIG
+
+### Changes
+- Added a GitHub Actions workflow to build the self-contained Docker image from the root `Dockerfile`
+- Configured Docker Hub login with repository secrets and tag-only publishing, using the Git tag as the Docker image tag
+- Documented the required Docker Hub secrets and optional repository variable in the README
+
+### Files Modified
+- `.github/workflows/publish-docker-image.yml`
+- `README.md`
+- `DEVELOPMENT.md`
+
+### Rationale
+Automating Docker Hub publishing removes the manual image build/push step and makes production deployments reproducible from GitHub Actions.
+
+### Breaking Changes
+None
+
+### Next Steps
+- Add `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` in GitHub repository secrets before pushing a release tag
+- Optionally set `DOCKERHUB_REPOSITORY` if the Docker Hub repository should not be named `ai-watch`
+
 ## [2026-05-30 23:40] - FEATURE
 
 ### Changes
