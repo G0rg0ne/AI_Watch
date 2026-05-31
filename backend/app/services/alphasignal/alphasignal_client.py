@@ -5,13 +5,12 @@ from __future__ import annotations
 import json
 import logging
 from datetime import date
-from urllib.parse import urljoin
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 import httpx
 
 from backend.app.core.config import Settings, get_settings
 from backend.app.services.alphasignal.archive_parser import (
-    ARCHIVE_API_PATH,
     build_newsletter_api_url,
     extract_campaign_id,
     parse_api_timestamp,
@@ -29,10 +28,14 @@ class AlphaSignalClient:
         self.settings = settings or get_settings()
 
     def _build_archive_api_url(self, page: int) -> str:
-        """Build a paginated archive API URL from base settings."""
-        base = self.settings.alphasignal_base_url.rstrip("/") + "/"
-        path = f"{ARCHIVE_API_PATH.lstrip('/')}?page={page}&limit={self.settings.alphasignal_archive_limit}"
-        return urljoin(base, path)
+        """Build a paginated archive API URL from the configured archive API URL."""
+        parsed = urlparse(self.settings.alphasignal_archive_api_url)
+        query = parse_qs(parsed.query, keep_blank_values=True)
+        query["page"] = [str(page)]
+        if "limit" not in query:
+            query["limit"] = [str(self.settings.alphasignal_archive_limit)]
+        new_query = urlencode(query, doseq=True)
+        return urlunparse(parsed._replace(query=new_query))
 
     @staticmethod
     def _page_oldest_date(items: list[dict]) -> date | None:
@@ -54,7 +57,7 @@ class AlphaSignalClient:
     @traceable_step("alphasignal_fetch_archive_api")
     def fetch_archive_listing(self, start_date: date | None = None) -> str:
         """Fetch archive listing JSON, paginating when needed for backfill."""
-        first_url = self.settings.alphasignal_archive_api_url
+        first_url = self._build_archive_api_url(1)
         logger.info("Fetching AlphaSignal archive API: %s", first_url)
         response = httpx.get(first_url, timeout=30.0, follow_redirects=True)
         response.raise_for_status()

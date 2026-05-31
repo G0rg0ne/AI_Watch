@@ -296,3 +296,24 @@ None
 ### Next Steps
 - Set `ALPHASIGNAL_START_DATE` in `.env` for initial backfill, then leave unset or adjust as needed
 - Rebuild Docker and verify multi-edition runs in logs and LangSmith traces
+
+## [2026-05-31 12:00] - BUGFIX
+
+### Changes
+- Fixed archive API pagination to build all page URLs from `ALPHASIGNAL_ARCHIVE_API_URL` instead of reconstructing from `ALPHASIGNAL_BASE_URL`
+- Page 1 and subsequent backfill pages now share the same host, path, `limit`, and any other query parameters
+- Added unit tests for `_build_archive_api_url`
+
+### Files Modified
+- `backend/app/services/alphasignal/alphasignal_client.py`
+- `tests/backend/test_alphasignal_client.py`
+- `README.md`
+
+### Rationale
+Page 1 used the configured archive API URL while page 2+ ignored it and rebuilt URLs from base URL and `ALPHASIGNAL_ARCHIVE_LIMIT`, causing mismatched pagination when env vars were customized.
+
+### Breaking Changes
+None
+
+### Next Steps
+None

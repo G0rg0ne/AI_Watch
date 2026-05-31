@@ -196,8 +196,8 @@ The top-level `alphasignal_agent_run` trace includes a `trigger` input so runs a
 | `LANGSMITH_SUMMARIZER_PROMPT` | No | LangSmith Prompt Hub id for summarizer (default: `alphasignal-newsletter-summarizer:prod`) |
 | `ALPHASIGNAL_BASE_URL` | No | AlphaSignal site origin (default: `https://alphasignal.ai`) |
 | `ALPHASIGNAL_ARCHIVE_URL` | No | Public archive page URL (reference only) |
-| `ALPHASIGNAL_ARCHIVE_API_URL` | No | Archive listing API URL (default: `https://alphasignal.ai/api/archive?page=1&limit=10`) |
-| `ALPHASIGNAL_ARCHIVE_LIMIT` | No | Page size when paginating archive API for backfill (default: `10`) |
+| `ALPHASIGNAL_ARCHIVE_API_URL` | No | Canonical archive listing API URL; all paginated requests derive from this URL (default: `https://alphasignal.ai/api/archive?page=1&limit=10`) |
+| `ALPHASIGNAL_ARCHIVE_LIMIT` | No | Default page size when `limit` is omitted from `ALPHASIGNAL_ARCHIVE_API_URL` (default: `10`) |
 | `ALPHASIGNAL_START_DATE` | No | Only process editions with `published_at` on/after this date (`YYYY-MM-DD`, UTC date-only). Unset = no cutoff; all unseen editions are eligible |
 | `DATABASE_URL` | No | SQLite URL (default: `/data/ai_watch.db` in Docker) |
 | `SMTP_HOST` | Yes | SMTP server host |
