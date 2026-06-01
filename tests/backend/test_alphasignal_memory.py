@@ -343,7 +343,8 @@ def test_agent_processes_only_unseen_entries_when_mixed(
     """
 
     parsed_entries = parse_archive_entries(archive_html)
-    seen_entry = next(entry for entry in parsed_entries if "seen" in entry.url)
+    seen_url = "https://alphasignal.ai/newsletter/seen"
+    seen_entry = next(entry for entry in parsed_entries if entry.url == seen_url)
     PublicationMemory(db_session).mark_seen(seen_entry)
 
     alphasignal = MagicMock()
@@ -365,7 +366,8 @@ def test_agent_processes_only_unseen_entries_when_mixed(
     assert result.processed_count == 1
     email_sender.send.assert_called_once()
 
-    unseen_entry = next(entry for entry in parsed_entries if "unseen" in entry.url)
+    unseen_url = "https://alphasignal.ai/newsletter/unseen"
+    unseen_entry = next(entry for entry in parsed_entries if entry.url == unseen_url)
     memory = PublicationMemory(db_session)
     assert memory.is_seen(unseen_entry)
     assert memory.is_seen(seen_entry)
