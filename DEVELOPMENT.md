@@ -1,5 +1,23 @@
 # Development Log
 
+## [2026-06-01 14:00] - CONFIG
+
+### Changes
+- Set `persist-credentials: false` on the publish workflow checkout step so `GITHUB_TOKEN` is not written into the workspace for later steps or artifacts
+
+### Files Modified
+- `.github/workflows/publish-docker-image.yml`
+- `DEVELOPMENT.md`
+
+### Rationale
+Prevents accidental credential leakage when the job only needs a read-only clone and uses Docker Hub secrets separately for push.
+
+### Breaking Changes
+None
+
+### Next Steps
+None
+
 ## [2026-06-01 12:00] - BUGFIX
 
 ### Changes
