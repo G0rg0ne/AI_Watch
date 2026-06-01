@@ -1,5 +1,22 @@
 # Development Log
 
+## [2026-06-01 12:00] - BUGFIX
+
+### Changes
+- Fixed `test_agent_processes_only_unseen_entries_when_mixed` to resolve seen/unseen archive entries by exact URL equality instead of substring matching (`"seen" in entry.url` also matched `/newsletter/unseen`)
+
+### Files Modified
+- `tests/backend/test_alphasignal_memory.py`
+
+### Rationale
+Substring lookup could pre-mark the wrong publication and make the mixed seen/unseen agent test flaky or incorrect.
+
+### Breaking Changes
+None
+
+### Next Steps
+None
+
 ## [2026-05-31 23:45] - CONFIG
 
 ### Changes
