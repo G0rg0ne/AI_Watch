@@ -31,6 +31,7 @@ AI_Watch/
 │   └── requirements.txt
 ├── shared/schemas/alphasignal.py   # Shared Pydantic models
 ├── tests/backend/                  # Unit tests
+├── .github/workflows/              # CI image publishing
 ├── Dockerfile
 ├── docker-compose.yml
 ├── .env.example
@@ -41,15 +42,15 @@ AI_Watch/
 ## How It Works
 
 1. **Daily scheduler** triggers the agent at the configured UTC time.
-2. **httpx** fetches the AlphaSignal archive JSON API.
+2. **httpx** fetches the AlphaSignal archive JSON API (paginated when `ALPHASIGNAL_START_DATE` is set for backfill).
 3. **Archive parser** extracts publication title, URL, and datetime from each row.
-4. **Memory (SQLite)** checks whether the newest publication was already processed.
-5. If new, **httpx** fetches the newsletter JSON API (`/api/archive/{campaign_id}`) and unwraps embedded HTML.
+4. **Memory (SQLite)** finds every unseen publication on or after the optional start date.
+5. For each eligible edition (oldest first), **httpx** fetches the newsletter JSON API (`/api/archive/{campaign_id}`) and unwraps embedded HTML.
 6. **Newsletter parser** extracts highlight titles, detailed summaries/resumes, and detail links.
 7. **LangSmith** supplies the summarization chat prompt; **OpenAI** generates an email-ready digest.
-8. **SMTP** sends the email and the publication is stored in memory.
+8. **SMTP** sends one email per edition and each publication is stored in memory only after its email succeeds.
 
-Emails are **not** sent when the latest publication was already seen.
+If multiple new newsletters appeared since the last run, one run sends **one separate email per edition**. Editions before `ALPHASIGNAL_START_DATE` are ignored entirely (no fetch, no email, not marked seen).
 
 ## Setup
 
@@ -102,7 +103,35 @@ Manual trigger (testing):
 curl -X POST http://localhost:8000/run-now
 ```
 
-### 4. Push to Docker Hub
+### 4. Publish to Docker Hub
+
+This repository includes a GitHub Actions workflow that builds the self-contained Docker image from `Dockerfile` and pushes it to Docker Hub.
+
+Configure these GitHub repository secrets:
+
+| Secret | Description |
+|--------|-------------|
+| `DOCKERHUB_USERNAME` | Docker Hub username or namespace owner |
+| `DOCKERHUB_TOKEN` | Docker Hub access token with permission to push images |
+
+Optional GitHub repository variable:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DOCKERHUB_REPOSITORY` | `ai-watch` | Docker Hub repository name under `DOCKERHUB_USERNAME` |
+
+The workflow publishes only when a Git tag is pushed. The Docker image uses the same tag name, so pushing `v1.0.0` publishes `YOUR_DOCKERHUB_USER/ai-watch:v1.0.0`.
+
+Third-party Actions in `.github/workflows/publish-docker-image.yml` are pinned to immutable commit SHAs (with version comments). Dependabot opens weekly PRs to bump those pins via `.github/dependabot.yml`.
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+Use Docker-compatible tag names for releases.
+
+Manual local push remains available:
 
 ```bash
 docker build -t YOUR_DOCKERHUB_USER/ai-watch:latest .
@@ -169,7 +198,9 @@ The top-level `alphasignal_agent_run` trace includes a `trigger` input so runs a
 | `LANGSMITH_SUMMARIZER_PROMPT` | No | LangSmith Prompt Hub id for summarizer (default: `alphasignal-newsletter-summarizer:prod`) |
 | `ALPHASIGNAL_BASE_URL` | No | AlphaSignal site origin (default: `https://alphasignal.ai`) |
 | `ALPHASIGNAL_ARCHIVE_URL` | No | Public archive page URL (reference only) |
-| `ALPHASIGNAL_ARCHIVE_API_URL` | No | Archive listing API URL (default: `https://alphasignal.ai/api/archive?page=1&limit=10`) |
+| `ALPHASIGNAL_ARCHIVE_API_URL` | No | Canonical archive listing API URL; all paginated requests derive from this URL (default: `https://alphasignal.ai/api/archive?page=1&limit=10`) |
+| `ALPHASIGNAL_ARCHIVE_LIMIT` | No | Default page size when `limit` is omitted from `ALPHASIGNAL_ARCHIVE_API_URL` (default: `10`) |
+| `ALPHASIGNAL_START_DATE` | No | Only process editions with `published_at` on/after this date (`YYYY-MM-DD`, UTC date-only). Unset = no cutoff; all unseen editions are eligible |
 | `DATABASE_URL` | No | SQLite URL (default: `/data/ai_watch.db` in Docker) |
 | `SMTP_HOST` | Yes | SMTP server host |
 | `SMTP_PORT` | No | SMTP port (default: `587`) |
@@ -200,7 +231,7 @@ pip install -r backend/requirements.txt
 pytest
 ```
 
-Tests cover archive parsing, newsletter parsing, summarizer OpenAI calls, memory deduplication, and agent skip/process flows (mocked AlphaSignal client, OpenAI, SMTP).
+Tests cover archive parsing, newsletter parsing, summarizer OpenAI calls, memory deduplication, batch multi-edition agent runs, start-date filtering, and agent skip/process flows (mocked AlphaSignal client, OpenAI, SMTP).
 
 ## Deployment Notes
 

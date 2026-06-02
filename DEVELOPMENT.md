@@ -1,5 +1,83 @@
 # Development Log
 
+## [2026-06-01 16:00] - CONFIG
+
+### Changes
+- Pinned GitHub Actions in the publish workflow to immutable commit SHAs (`actions/checkout` v4.3.1, `docker/setup-buildx-action` v3.12.0, `docker/login-action` v3.7.0, `docker/build-push-action` v6.19.2) with trailing version comments
+- Added Dependabot `github-actions` updates (weekly) to propose SHA bumps safely
+
+### Files Modified
+- `.github/workflows/publish-docker-image.yml`
+- `.github/dependabot.yml`
+- `README.md`
+- `DEVELOPMENT.md`
+
+### Rationale
+Supply-chain hardening: floating `@v4`/`@v3`/`@v6` tags can resolve to new action code without a repo change; SHA pinning fixes what runs in CI until an intentional update.
+
+### Breaking Changes
+None
+
+### Next Steps
+- Push a test tag and confirm the publish workflow still succeeds on GitHub Actions
+
+## [2026-06-01 14:00] - CONFIG
+
+### Changes
+- Set `persist-credentials: false` on the publish workflow checkout step so `GITHUB_TOKEN` is not written into the workspace for later steps or artifacts
+
+### Files Modified
+- `.github/workflows/publish-docker-image.yml`
+- `DEVELOPMENT.md`
+
+### Rationale
+Prevents accidental credential leakage when the job only needs a read-only clone and uses Docker Hub secrets separately for push.
+
+### Breaking Changes
+None
+
+### Next Steps
+None
+
+## [2026-06-01 12:00] - BUGFIX
+
+### Changes
+- Fixed `test_agent_processes_only_unseen_entries_when_mixed` to resolve seen/unseen archive entries by exact URL equality instead of substring matching (`"seen" in entry.url` also matched `/newsletter/unseen`)
+
+### Files Modified
+- `tests/backend/test_alphasignal_memory.py`
+
+### Rationale
+Substring lookup could pre-mark the wrong publication and make the mixed seen/unseen agent test flaky or incorrect.
+
+### Breaking Changes
+None
+
+### Next Steps
+None
+
+## [2026-05-31 23:45] - CONFIG
+
+### Changes
+- Added a GitHub Actions workflow to build the self-contained Docker image from the root `Dockerfile`
+- Configured Docker Hub login with repository secrets and tag-only publishing, using the Git tag as the Docker image tag
+- Documented the required Docker Hub secrets and optional repository variable in the README
+
+### Files Modified
+- `.github/workflows/publish-docker-image.yml`
+- `README.md`
+- `DEVELOPMENT.md`
+
+### Rationale
+Automating Docker Hub publishing removes the manual image build/push step and makes production deployments reproducible from GitHub Actions.
+
+### Breaking Changes
+None
+
+### Next Steps
+- Add `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` in GitHub repository secrets before pushing a release tag
+- Optionally set `DOCKERHUB_REPOSITORY` if the Docker Hub repository should not be named `ai-watch`
+
 ## [2026-05-30 23:40] - FEATURE
 
 ### Changes
@@ -243,3 +321,55 @@ The daily agent path already used AlphaSignal JSON APIs via `httpx`; Tavily was 
 ### Next Steps
 - Remove `TAVILY_API_KEY` from local `.env` and any deployment secret stores
 - Rebuild Docker image after `pip install` without `tavily-python`
+
+## [2026-05-31 23:45] - FEATURE
+
+### Changes
+- Added `ALPHASIGNAL_START_DATE` and `ALPHASIGNAL_ARCHIVE_LIMIT` settings for optional backfill cutoff and archive pagination page size
+- Extended `AlphaSignalClient.fetch_archive_listing()` to paginate archive API pages when a start date is configured
+- Added `PublicationMemory.find_unseen_since()` to return all eligible unseen editions oldest-first
+- Refactored `AlphaSignalAgent.run()` to process every eligible unseen newsletter per run with partial-failure tolerance
+- Extended `RunResult` with batch fields (`processed_count`, `publication_urls`, `email_sent_count`, failure counts/URLs) while keeping existing single-edition fields
+- Added/updated unit tests for memory filtering, multi-edition runs, start-date cutoff, mixed seen/unseen, and partial failure
+- Updated README and created `.env.example` with the new environment variables
+
+### Files Modified
+- `backend/app/core/config.py`
+- `backend/app/services/alphasignal/alphasignal_client.py`
+- `backend/app/services/alphasignal/memory.py`
+- `backend/app/services/alphasignal/agent.py`
+- `shared/schemas/alphasignal.py`
+- `tests/backend/test_alphasignal_memory.py`
+- `.env.example`
+- `README.md`
+
+### Rationale
+The agent previously processed only the newest unseen newsletter per run. Batch processing with an optional start date supports daily catch-up (multiple emails per run) and controlled backfills without touching the existing dedup key format.
+
+### Breaking Changes
+None
+
+### Next Steps
+- Set `ALPHASIGNAL_START_DATE` in `.env` for initial backfill, then leave unset or adjust as needed
+- Rebuild Docker and verify multi-edition runs in logs and LangSmith traces
+
+## [2026-05-31 12:00] - BUGFIX
+
+### Changes
+- Fixed archive API pagination to build all page URLs from `ALPHASIGNAL_ARCHIVE_API_URL` instead of reconstructing from `ALPHASIGNAL_BASE_URL`
+- Page 1 and subsequent backfill pages now share the same host, path, `limit`, and any other query parameters
+- Added unit tests for `_build_archive_api_url`
+
+### Files Modified
+- `backend/app/services/alphasignal/alphasignal_client.py`
+- `tests/backend/test_alphasignal_client.py`
+- `README.md`
+
+### Rationale
+Page 1 used the configured archive API URL while page 2+ ignored it and rebuilt URLs from base URL and `ALPHASIGNAL_ARCHIVE_LIMIT`, causing mismatched pagination when env vars were customized.
+
+### Breaking Changes
+None
+
+### Next Steps
+None
