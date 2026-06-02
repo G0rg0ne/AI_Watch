@@ -122,6 +122,8 @@ Optional GitHub repository variable:
 
 The workflow publishes only when a Git tag is pushed. The Docker image uses the same tag name, so pushing `v1.0.0` publishes `YOUR_DOCKERHUB_USER/ai-watch:v1.0.0`.
 
+Third-party Actions in `.github/workflows/publish-docker-image.yml` are pinned to immutable commit SHAs (with version comments). Dependabot opens weekly PRs to bump those pins via `.github/dependabot.yml`.
+
 ```bash
 git tag v1.0.0
 git push origin v1.0.0

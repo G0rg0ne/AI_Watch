@@ -1,5 +1,26 @@
 # Development Log
 
+## [2026-06-01 16:00] - CONFIG
+
+### Changes
+- Pinned GitHub Actions in the publish workflow to immutable commit SHAs (`actions/checkout` v4.3.1, `docker/setup-buildx-action` v3.12.0, `docker/login-action` v3.7.0, `docker/build-push-action` v6.19.2) with trailing version comments
+- Added Dependabot `github-actions` updates (weekly) to propose SHA bumps safely
+
+### Files Modified
+- `.github/workflows/publish-docker-image.yml`
+- `.github/dependabot.yml`
+- `README.md`
+- `DEVELOPMENT.md`
+
+### Rationale
+Supply-chain hardening: floating `@v4`/`@v3`/`@v6` tags can resolve to new action code without a repo change; SHA pinning fixes what runs in CI until an intentional update.
+
+### Breaking Changes
+None
+
+### Next Steps
+- Push a test tag and confirm the publish workflow still succeeds on GitHub Actions
+
 ## [2026-06-01 14:00] - CONFIG
 
 ### Changes
