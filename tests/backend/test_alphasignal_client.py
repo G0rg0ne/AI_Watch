@@ -81,17 +81,24 @@ def test_fetch_newsletter_content_rejects_non_news_urls() -> None:
         client.fetch_newsletter_content("https://alphasignal.ai/email/campaign-1")
 
 
-def test_fetch_newsletter_content_fetches_news_article_page() -> None:
+def test_fetch_newsletter_content_fetches_news_detail_api() -> None:
     client = _client()
     article_url = "https://alphasignal.ai/news/test-article"
-    article_html = "<p>Article body</p>"
+    detail_payload = {
+        "success": True,
+        "data": {
+            "articleDetails": {
+                "summary_html": "<ul><li>Takeaway</li></ul>",
+                "html_text": "<p>Article body</p>",
+            }
+        },
+    }
 
-    with patch.object(client, "_fetch_url", return_value=article_html) as mock_fetch:
-        with patch(
-            "backend.app.services.alphasignal.alphasignal_client.extract_article_html_from_page",
-            return_value=article_html,
-        ):
-            content = client.fetch_newsletter_content(article_url)
+    with patch.object(client, "_fetch_url", return_value=json.dumps(detail_payload)) as mock_fetch:
+        content = client.fetch_newsletter_content(article_url)
 
-    assert content == article_html
-    mock_fetch.assert_called_once_with(article_url)
+    assert "<p>Article body</p>" in content
+    assert "<li>Takeaway</li>" in content
+    mock_fetch.assert_called_once_with(
+        "https://api.alphasignal.ai/api/news/detail?slug=test-article"
+    )

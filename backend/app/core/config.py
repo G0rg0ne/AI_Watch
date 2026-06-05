@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     # AlphaSignal
     alphasignal_base_url: str = "https://alphasignal.ai"
     alphasignal_news_api_url: str = "https://api.alphasignal.ai/api/news"
+    alphasignal_news_detail_api_url: str = "https://api.alphasignal.ai/api/news/detail"
     alphasignal_archive_limit: int = Field(default=10, ge=1, le=100)
     alphasignal_start_date: date | None = None
 

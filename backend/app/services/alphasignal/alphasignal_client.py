@@ -5,13 +5,15 @@ from __future__ import annotations
 import json
 import logging
 from datetime import date
+from urllib.parse import urlencode
 
 import httpx
 
 from backend.app.core.config import Settings, get_settings
 from backend.app.services.alphasignal.archive_parser import (
     extract_api_items,
-    extract_article_html_from_page,
+    extract_article_html_from_detail_api,
+    extract_news_slug_from_url,
     is_news_article_url,
     parse_api_timestamp,
     sanitize_json_payload,
@@ -112,6 +114,11 @@ class AlphaSignalClient:
         raw_payload = json.loads(sanitize_json_payload(content))
         return self._normalize_news_api_payload(raw_payload)
 
+    def _build_news_detail_api_url(self, slug: str) -> str:
+        """Build the official news detail API URL for one article slug."""
+        query = urlencode({"slug": slug})
+        return f"{self.settings.alphasignal_news_detail_api_url}?{query}"
+
     @traceable_step("alphasignal_fetch_archive_api")
     def fetch_archive_listing(self, start_date: date | None = None) -> str:
         """Fetch archive listing JSON, paginating when needed for backfill."""
@@ -161,21 +168,23 @@ class AlphaSignalClient:
         return json.dumps(merged_payload)
 
     def _fetch_news_article_content(self, article_url: str) -> str:
-        """Fetch HTML content from an official AlphaSignal /news/... article page."""
-        logger.info("Fetching AlphaSignal news article page: %s", article_url)
-        page_content = self._fetch_url(article_url)
-        article_html = extract_article_html_from_page(page_content)
+        """Fetch article HTML from the official AlphaSignal news detail API."""
+        slug = extract_news_slug_from_url(article_url)
+        if not slug:
+            raise ValueError(f"Could not extract news slug from URL: {article_url}")
+
+        detail_url = self._build_news_detail_api_url(slug)
+        logger.info("Fetching AlphaSignal news detail API: %s", detail_url)
+        content = self._fetch_url(detail_url)
+        raw_payload = json.loads(sanitize_json_payload(content))
+        article_html = extract_article_html_from_detail_api(raw_payload)
         if article_html:
             return article_html
-        logger.warning(
-            "Could not extract articleDetails from %s; returning rendered page HTML",
-            article_url,
-        )
-        return page_content
+        raise ValueError(f"No article HTML found in detail API response for {article_url}")
 
     @traceable_step("alphasignal_fetch_newsletter_api")
     def fetch_newsletter_content(self, newsletter_url: str) -> str:
-        """Fetch article HTML from an official AlphaSignal /news/... page."""
+        """Fetch article HTML from the official AlphaSignal news detail API."""
         if not is_news_article_url(newsletter_url):
             raise ValueError(
                 f"Unsupported AlphaSignal URL (expected /news/...): {newsletter_url}"

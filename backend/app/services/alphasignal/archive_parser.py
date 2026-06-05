@@ -44,6 +44,15 @@ def is_news_article_url(url: str) -> bool:
     return "/news/" in url
 
 
+def extract_news_slug_from_url(url: str) -> str | None:
+    """Extract the article slug from an official AlphaSignal /news/... URL."""
+    match = re.search(r"/news/([^?#]+)", url)
+    if not match:
+        return None
+    slug = match.group(1).strip("/")
+    return slug or None
+
+
 def parse_api_timestamp(raw_timestamp: str) -> datetime:
     """Parse ISO timestamps returned by the AlphaSignal news API."""
     normalized = raw_timestamp.replace("Z", "+00:00")
@@ -119,6 +128,26 @@ def _decode_nextjs_embedded_string(raw: str) -> str:
         return json.loads(f'"{raw}"')
     except json.JSONDecodeError:
         return raw.replace("\\n", "\n").replace('\\"', '"').replace("\\/", "/")
+
+
+def extract_article_html_from_detail_api(payload: dict) -> str | None:
+    """Extract article HTML from the official news detail API JSON response."""
+    data = payload.get("data")
+    if not isinstance(data, dict):
+        return None
+    details = data.get("articleDetails")
+    if not isinstance(details, dict):
+        return None
+    parts: list[str] = []
+    summary = details.get("summary_html")
+    body = details.get("html_text")
+    if isinstance(summary, str) and summary.strip():
+        parts.append(summary.strip())
+    if isinstance(body, str) and body.strip():
+        parts.append(body.strip())
+    if not parts:
+        return None
+    return "\n".join(parts)
 
 
 def extract_article_html_from_page(content: str) -> str | None:

@@ -12,7 +12,7 @@ Daily Python worker that scans the AlphaSignal news API, detects new article pub
 | Layer | Technology |
 |-------|------------|
 | Language | Python 3.11 |
-| Web retrieval | httpx (official news API + `/news/...` article pages) |
+| Web retrieval | httpx (official news API + detail API on `api.alphasignal.ai`) |
 | Summarization | OpenAI (configurable model, default `gpt-4o-mini`) |
 | Observability | LangSmith (`@traceable_step`) |
 | Memory / dedup | SQLite via SQLAlchemy |
@@ -29,8 +29,8 @@ APScheduler (daily) → AlphaSignalAgent.run()
   → archive_parser: extract title + /news/... URL + publish_time from each row
   → PublicationMemory.find_unseen_since()   ← SQLite dedup
      ├─ Already seen → return status=skipped, no email
-     └─ New → httpx GET: alphasignal.ai/news/...
-              → archive_parser: extract articleDetails HTML
+     └─ New → httpx GET: api.alphasignal.ai/api/news/detail?slug=...
+              → archive_parser: extract articleDetails HTML from JSON
               → newsletter_parser: highlights + detailed items + links
               → NewsletterSummarizer (OpenAI)
               → SmtpEmailSender

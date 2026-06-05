@@ -6,7 +6,9 @@ from backend.app.services.alphasignal.archive_parser import (
     build_dedup_key,
     build_news_article_slug,
     build_news_article_url,
+    extract_article_html_from_detail_api,
     extract_article_html_from_page,
+    extract_news_slug_from_url,
     parse_archive_entries,
 )
 
@@ -71,6 +73,31 @@ def test_build_news_article_url_uses_official_news_path() -> None:
     assert url == (
         "https://alphasignal.ai/news/openai-s-codex-gains-a-personal-dashboard"
     )
+
+
+def test_extract_news_slug_from_url() -> None:
+    url = (
+        "https://alphasignal.ai/news/cursor-s-design-mode-lets-you-point-draw-and-talk-ui-edits-into-code"
+    )
+    assert extract_news_slug_from_url(url) == (
+        "cursor-s-design-mode-lets-you-point-draw-and-talk-ui-edits-into-code"
+    )
+
+
+def test_extract_article_html_from_detail_api() -> None:
+    payload = {
+        "success": True,
+        "data": {
+            "articleDetails": {
+                "summary_html": "<ul><li>Takeaway one</li></ul>",
+                "html_text": "<p>Article body</p>",
+            }
+        },
+    }
+    html = extract_article_html_from_detail_api(payload)
+    assert html is not None
+    assert "<li>Takeaway one</li>" in html
+    assert "<p>Article body</p>" in html
 
 
 def test_extract_article_html_from_page_decodes_nextjs_payload() -> None:
