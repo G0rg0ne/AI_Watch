@@ -5,14 +5,14 @@ alwaysApply: true
 
 # AI Watch — AlphaSignal News Agent
 
-Daily Python worker that scans the AlphaSignal archive, detects new newsletter publications, and emails an AI-generated digest.
+Daily Python worker that scans the AlphaSignal news API, detects new article publications, and emails an AI-generated digest.
 
 ## Tech stack
 
 | Layer | Technology |
 |-------|------------|
 | Language | Python 3.11 |
-| Web retrieval | httpx (AlphaSignal JSON APIs) |
+| Web retrieval | httpx (official news API + `/news/...` article pages) |
 | Summarization | OpenAI (configurable model, default `gpt-4o-mini`) |
 | Observability | LangSmith (`@traceable_step`) |
 | Memory / dedup | SQLite via SQLAlchemy |
@@ -25,11 +25,12 @@ Daily Python worker that scans the AlphaSignal archive, detects new newsletter p
 
 ```
 APScheduler (daily) → AlphaSignalAgent.run()
-  → httpx: fetch archive JSON API
-  → archive_parser: extract title + URL + published_at from each row
-  → PublicationMemory.find_latest_unseen()   ← SQLite dedup
+  → httpx POST: api.alphasignal.ai/api/news
+  → archive_parser: extract title + /news/... URL + publish_time from each row
+  → PublicationMemory.find_unseen_since()   ← SQLite dedup
      ├─ Already seen → return status=skipped, no email
-     └─ New → httpx: fetch newsletter JSON API
+     └─ New → httpx GET: alphasignal.ai/news/...
+              → archive_parser: extract articleDetails HTML
               → newsletter_parser: highlights + detailed items + links
               → NewsletterSummarizer (OpenAI)
               → SmtpEmailSender
@@ -48,7 +49,7 @@ backend/app/
     tracing.py            # configure_langsmith(), @traceable_step
     alphasignal/
       agent.py            # AlphaSignalAgent orchestrator
-      archive_parser.py   # parse archive rows
+      archive_parser.py   # parse news API rows + article page HTML
       newsletter_parser.py
       memory.py           # PublicationMemory (SQLite)
       summarizer.py       # OpenAI
@@ -70,5 +71,5 @@ Dockerfile / docker-compose.yml
 - `DATABASE_URL=sqlite:////data/ai_watch.db` inside Docker; mount `./data:/data`.
 - Dedup key = `sha256(url | title | published_at.isoformat())`.
 - Every new service step must be wrapped with `@traceable_step("step_name")`.
-- Archive row format: `🤖 Title text MM/DD/YYYY, H:MM:SS PM`
+- Official news API body: `{"page":1,"limit":N,"sort":"latest","timeframe":"latest"}`.
 - `RUN_ON_STARTUP=true` triggers an immediate run when the container starts.

@@ -1,6 +1,6 @@
 # AI Watch - AlphaSignal News Agent
 
-Daily AI/ML news agent that monitors the [AlphaSignal archive](https://alphasignal.ai/archive), detects new newsletter publications, extracts headlines and summaries, generates an OpenAI digest, and emails it via SMTP only when a new publication is found.
+Daily AI/ML news agent that monitors the [AlphaSignal homepage](https://alphasignal.ai/), detects new article publications, extracts headlines and summaries, generates an OpenAI digest, and emails it via SMTP only when a new publication is found.
 
 ## Technology Stack
 
@@ -9,7 +9,7 @@ Daily AI/ML news agent that monitors the [AlphaSignal archive](https://alphasign
 | Runtime | Python 3.11 |
 | API / Health | FastAPI + Uvicorn |
 | Scheduler | APScheduler (internal daily cron) |
-| Web retrieval | httpx (direct) or Browserbase + Playwright (production) |
+| Web retrieval | httpx (official AlphaSignal news API + article pages) |
 | Summarization | OpenAI |
 | Observability | LangSmith |
 | Memory | SQLite (persistent dedup) |
@@ -42,15 +42,15 @@ AI_Watch/
 ## How It Works
 
 1. **Daily scheduler** triggers the agent at the configured UTC time.
-2. **AlphaSignal client** fetches the archive JSON API via direct `httpx` or Browserbase-hosted Chromium (paginated when `ALPHASIGNAL_START_DATE` is set for backfill).
-3. **Archive parser** extracts publication title, URL, and datetime from each row.
+2. **AlphaSignal client** POSTs to the official news API (`https://api.alphasignal.ai/api/news`) via `httpx` (paginated when `ALPHASIGNAL_START_DATE` is set for backfill).
+3. **Archive parser** extracts publication title, official `/news/...` URL, and `publish_time` from each API row.
 4. **Memory (SQLite)** finds every unseen publication on or after the optional start date.
-5. For each eligible edition (oldest first), the client fetches the newsletter JSON API (`/api/archive/{campaign_id}`) and unwraps embedded HTML.
+5. For each eligible article (oldest first), the client fetches the public AlphaSignal article page and extracts serialized `articleDetails` HTML (`summary_html` + `html_text`).
 6. **Newsletter parser** extracts highlight titles, detailed summaries/resumes, and detail links.
 7. **LangSmith** supplies the summarization chat prompt; **OpenAI** generates an email-ready digest.
 8. **SMTP** sends one email per edition and each publication is stored in memory only after its email succeeds.
 
-If multiple new newsletters appeared since the last run, one run sends **one separate email per edition**. Editions before `ALPHASIGNAL_START_DATE` are ignored entirely (no fetch, no email, not marked seen).
+If multiple new articles appeared since the last run, one run sends **one separate email per edition**. Editions before `ALPHASIGNAL_START_DATE` are ignored entirely (no fetch, no email, not marked seen).
 
 ## Setup
 
@@ -197,16 +197,9 @@ The top-level `alphasignal_agent_run` trace includes a `trigger` input so runs a
 | `LANGCHAIN_ENDPOINT` | No | LangSmith endpoint |
 | `LANGSMITH_SUMMARIZER_PROMPT` | No | LangSmith Prompt Hub id for summarizer (default: `alphasignal-newsletter-summarizer:prod`) |
 | `ALPHASIGNAL_BASE_URL` | No | AlphaSignal site origin (default: `https://alphasignal.ai`) |
-| `ALPHASIGNAL_ARCHIVE_URL` | No | Public archive page URL (reference only) |
-| `ALPHASIGNAL_ARCHIVE_API_URL` | No | Canonical archive listing API URL; all paginated requests derive from this URL (default: `https://alphasignal.ai/api/archive?page=1&limit=10`) |
-| `ALPHASIGNAL_ARCHIVE_LIMIT` | No | Default page size when `limit` is omitted from `ALPHASIGNAL_ARCHIVE_API_URL` (default: `10`) |
+| `ALPHASIGNAL_NEWS_API_URL` | No | Official news listing API URL; the client POSTs JSON here (default: `https://api.alphasignal.ai/api/news`) |
+| `ALPHASIGNAL_ARCHIVE_LIMIT` | No | Page size for official news API pagination (default: `10`) |
 | `ALPHASIGNAL_START_DATE` | No | Only process editions with `published_at` on/after this date (`YYYY-MM-DD`, UTC date-only). Unset = no cutoff; all unseen editions are eligible |
-| `ALPHASIGNAL_FETCH_MODE` | No | Retrieval mode: `direct` (default), `browserbase`, or `auto` (direct first, Browserbase on 403) |
-| `BROWSERBASE_API_KEY` | When using Browserbase | Browserbase API key for hosted Chromium sessions |
-| `BROWSERBASE_PROJECT_ID` | No | Browserbase project id (recommended in production) |
-| `BROWSERBASE_REGION` | No | Browserbase session region (for example `us-west-2`) |
-| `BROWSERBASE_USE_PROXY` | No | Enable Browserbase default proxy (default: `true`) |
-| `BROWSERBASE_SESSION_TIMEOUT_SECONDS` | No | Browserbase session timeout in seconds (default: `120`, min `60`, max `21600`) |
 | `DATABASE_URL` | No | SQLite URL (default: `/data/ai_watch.db` in Docker) |
 | `SMTP_HOST` | Yes | SMTP server host |
 | `SMTP_PORT` | No | SMTP port (default: `587`) |
@@ -237,13 +230,15 @@ pip install -r backend/requirements.txt
 pytest
 ```
 
-Tests cover archive parsing, newsletter parsing, summarizer OpenAI calls, memory deduplication, batch multi-edition agent runs, start-date filtering, AlphaSignal fetch mode routing (direct/browserbase/auto), and agent skip/process flows (mocked AlphaSignal client, OpenAI, SMTP).
+Tests cover official news API parsing, news slug generation, article page HTML extraction, newsletter parsing, summarizer OpenAI calls, memory deduplication, batch multi-edition agent runs, start-date filtering, AlphaSignal client helpers, and agent skip/process flows (mocked AlphaSignal client, OpenAI, SMTP).
 
 ## Deployment Notes
 
 - Mount a persistent volume at `/data` so publication memory survives restarts.
-- On VPS providers such as Hetzner, AlphaSignal may return `403 Forbidden` for direct server-side HTTP requests. Set `ALPHASIGNAL_FETCH_MODE=browserbase` (or `auto`) and provide `BROWSERBASE_API_KEY` plus `BROWSERBASE_PROJECT_ID` in Dokploy.
-- Browserbase runs AlphaSignal fetches inside hosted Chromium sessions; the Dokploy container only orchestrates the agent and does not need a local browser install.
+- The official news API requires `POST` (not GET). The client sends `{"page":1,"limit":N,"sort":"latest","timeframe":"latest"}` to `ALPHASIGNAL_NEWS_API_URL`.
+- Article content is fetched from public `https://alphasignal.ai/news/...` pages via direct `httpx`.
+- After redeploying on Hetzner/Dokploy, run `POST /run-now` and confirm logs show the news API POST and `/news/...` article fetches.
+- Remove obsolete env vars if still set: `ALPHASIGNAL_FETCH_MODE`, `BROWSERBASE_*`, `ALPHASIGNAL_ARCHIVE_URL`, `ALPHASIGNAL_ARCHIVE_API_URL`.
 - Inject secrets via environment variables or a secrets manager; never bake them into the image.
 - LangSmith traces are available when `LANGCHAIN_API_KEY` is set.
 - Summarization prompts are pulled from LangSmith at runtime; create the prompt in Prompt Hub before the first successful digest run.

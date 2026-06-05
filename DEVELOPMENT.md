@@ -403,3 +403,100 @@ None
 ### Next Steps
 - Publish a new Docker image tag and set `ALPHASIGNAL_FETCH_MODE=browserbase` in Dokploy
 - Verify a manual `POST /run-now` succeeds and LangSmith traces show Browserbase fetch steps
+
+## [2026-06-05 22:30] - BUGFIX
+
+### Changes
+- Added AlphaSignal 404 fallbacks from private JSON API calls to public rendered HTML pages
+- Added Browserbase page-content retrieval for archive/newsletter fallback paths
+- Preserved existing behavior for 403 and non-404 errors so real access/configuration failures still surface
+- Added tests for Browserbase archive and newsletter API 404 fallbacks
+- Updated README deployment notes and test coverage description
+
+### Files Modified
+- `backend/app/services/alphasignal/browserbase_fetcher.py`
+- `backend/app/services/alphasignal/alphasignal_client.py`
+- `tests/backend/test_alphasignal_fetch_modes.py`
+- `README.md`
+- `DEVELOPMENT.md`
+
+### Rationale
+AlphaSignal returned `404 Not Found` for the configured private archive API path in production on Hetzner. Falling back to public page HTML lets the existing parsers continue processing newsletters when AlphaSignal changes or hides JSON API routes.
+
+### Breaking Changes
+None
+
+### Next Steps
+- Rebuild and redeploy the Docker image, then trigger `POST /run-now` to verify the fallback in production logs
+
+## [2026-06-05 22:50] - BUGFIX
+
+### Changes
+- Migrated archive listing to AlphaSignal's official news API (`POST https://api.alphasignal.ai/api/news`) with `sort=latest` and `timeframe=latest`
+- Added `ALPHASIGNAL_NEWS_API_URL` and changed default `ALPHASIGNAL_ARCHIVE_URL` to `https://alphasignal.ai/`
+- Generate official article URLs as `/news/{slug}` (70-character title slug) and parse `publish_time` from API rows
+- Fetch article content from public `/news/...` pages by extracting serialized `articleDetails.html_text` and `summary_html`
+- Added Browserbase POST support for the official news API; legacy `/api/archive` GET and homepage HTML remain as fallbacks
+- Extended archive parser with slug helpers, official news row parsing, and Next.js article HTML extraction
+- Updated unit tests for official API listing, slug generation, article page parsing, and fetch mode routing
+
+### Files Modified
+- `backend/app/core/config.py`
+- `backend/app/services/alphasignal/archive_parser.py`
+- `backend/app/services/alphasignal/alphasignal_client.py`
+- `backend/app/services/alphasignal/browserbase_fetcher.py`
+- `tests/backend/test_alphasignal_fetch_modes.py`
+- `tests/backend/test_alphasignal_client.py`
+- `tests/backend/test_archive_parser.py`
+- `.env.example`
+- `README.md`
+- `DEVELOPMENT.md`
+
+### Rationale
+AlphaSignal removed the old `/api/archive` and `/archive` newsletter paths and replaced them with a news grid on `https://alphasignal.ai/` backed by `POST /api/news`. The Hetzner deployment failed with Browserbase 404 on the legacy archive URL; adapting to the official API restores reliable listing and article retrieval on production VPS hosts.
+
+### Breaking Changes
+None (legacy archive/email URLs still work as fallbacks for existing SQLite entries)
+
+### Next Steps
+- Rebuild and redeploy the Docker image on Hetzner/Dokploy
+- Keep `ALPHASIGNAL_FETCH_MODE=browserbase` (or `auto`) and verify `POST /run-now` logs show official news API + `/news/...` fetches
+
+## [2026-06-05 23:30] - REFACTOR
+
+### Changes
+- Removed Browserbase integration (`browserbase_fetcher.py`, Playwright dependency, fetch-mode routing)
+- Removed legacy AlphaSignal paths: `/api/archive` listing, `/api/archive/{id}` newsletter API, `/email/{id}` URLs, and homepage HTML archive scraping
+- Simplified `AlphaSignalClient` to direct `httpx` only: POST official news API for listings, GET `/news/...` for article HTML
+- Simplified `archive_parser` to official news API JSON and article page extraction only
+- Removed env vars: `ALPHASIGNAL_FETCH_MODE`, `ALPHASIGNAL_ARCHIVE_URL`, `ALPHASIGNAL_ARCHIVE_API_URL`, all `BROWSERBASE_*`
+- Deleted `tests/backend/test_alphasignal_fetch_modes.py`; updated client, parser, and agent tests for official API fixtures
+
+### Files Modified
+- `backend/app/core/config.py`
+- `backend/requirements.txt`
+- `backend/app/services/alphasignal/alphasignal_client.py`
+- `backend/app/services/alphasignal/archive_parser.py`
+- `tests/backend/test_alphasignal_client.py`
+- `tests/backend/test_archive_parser.py`
+- `tests/backend/test_alphasignal_memory.py`
+- `tests/backend/test_summarizer.py`
+- `.env.example`
+- `README.md`
+- `.cursor/rules/project-context.mdc`
+
+### Files Deleted
+- `backend/app/services/alphasignal/browserbase_fetcher.py`
+- `tests/backend/test_alphasignal_fetch_modes.py`
+
+### Rationale
+AlphaSignal's official news API and `/news/...` pages are the only supported production path. Legacy fallbacks and Browserbase added complexity without fixing the Hetzner 404 (which was caused by a removed endpoint). A single direct httpx path is simpler to deploy and debug on Hetzner.
+
+### Breaking Changes
+- Removed env vars: `ALPHASIGNAL_FETCH_MODE`, `ALPHASIGNAL_ARCHIVE_URL`, `ALPHASIGNAL_ARCHIVE_API_URL`, `BROWSERBASE_*`
+- Non-`/news/` article URLs raise `ValueError` instead of attempting legacy fetches
+
+### Next Steps
+- Rebuild and redeploy Docker image on Hetzner/Dokploy
+- Remove obsolete Browserbase and legacy env vars from server configuration
+- Verify `POST /run-now` logs show news API POST and `/news/...` fetches only

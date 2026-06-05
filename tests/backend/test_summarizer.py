@@ -30,7 +30,7 @@ def _test_settings(**overrides: object) -> Settings:
 def _sample_digest() -> NewsletterDigest:
     entry = ArchiveEntry(
         title="Test Newsletter",
-        url="https://alphasignal.ai/email/1",
+        url="https://alphasignal.ai/news/test-newsletter",
         published_at=datetime(2026, 5, 30, 12, 0, 0, tzinfo=timezone.utc),
     )
     return NewsletterDigest(archive_entry=entry)

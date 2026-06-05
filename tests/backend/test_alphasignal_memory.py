@@ -1,5 +1,6 @@
 """Tests for publication memory deduplication and batch agent runs."""
 
+import json
 from datetime import date, datetime
 from unittest.mock import MagicMock, patch
 
@@ -47,6 +48,29 @@ def _test_settings(**overrides) -> Settings:
     }
     defaults.update(overrides)
     return Settings(**defaults)
+
+
+def _archive_json(*items: tuple[str, str]) -> str:
+    """Build official news API JSON from (title, publish_time_iso) pairs."""
+    rows = [
+        {
+            "news_id": f"news-{index}",
+            "title": title,
+            "publish_time": publish_time,
+        }
+        for index, (title, publish_time) in enumerate(items)
+    ]
+    return json.dumps(
+        {
+            "metadata": {
+                "total_records": len(rows),
+                "total_pages": 1,
+                "current_page": 1,
+                "limit": 10,
+            },
+            "data": rows,
+        }
+    )
 
 
 def test_memory_marks_and_detects_seen_publications(db_session) -> None:
@@ -148,13 +172,12 @@ def test_run_alphasignal_agent_passes_trace_trigger(db_session) -> None:
 
 
 def test_agent_skips_when_publication_already_seen(db_session) -> None:
-    entry = _entry("https://alphasignal.ai/newsletter/a", "Already seen", 29)
-    archive_html = (
-        '<a href="/newsletter/a"><div>Already seen 5/29/2026, 12:00:00 PM</div></a>'
-    )
+    archive_json = _archive_json(("Already seen", "2026-05-29T12:00:00.000Z"))
+    parsed_entries = parse_archive_entries(archive_json)
+    entry = parsed_entries[0]
 
     alphasignal = MagicMock()
-    alphasignal.fetch_archive_listing.return_value = archive_html
+    alphasignal.fetch_archive_listing.return_value = archive_json
 
     memory = PublicationMemory(db_session)
     memory.mark_seen(entry)
@@ -175,11 +198,9 @@ def test_agent_processes_new_publication(
     mock_email_sender_cls,
     db_session,
 ) -> None:
-    archive_html = """
-    <a href="/newsletter/new-one">
-      <div>🤖 Brand new newsletter 5/30/2026, 8:00:00 AM</div>
-    </a>
-    """
+    archive_json = _archive_json(
+        ("Brand new newsletter", "2026-05-30T08:00:00.000Z"),
+    )
     newsletter_content = """
     # In Today's Signal
     Major AI launch today
@@ -190,7 +211,7 @@ def test_agent_processes_new_publication(
     """
 
     alphasignal = MagicMock()
-    alphasignal.fetch_archive_listing.return_value = archive_html
+    alphasignal.fetch_archive_listing.return_value = archive_json
     alphasignal.fetch_newsletter_content.return_value = newsletter_content
 
     summarizer = MagicMock()
@@ -209,7 +230,7 @@ def test_agent_processes_new_publication(
     assert result.processed_count == 1
     assert result.email_sent_count == 1
     email_sender.send.assert_called_once()
-    parsed_entries = parse_archive_entries(archive_html)
+    parsed_entries = parse_archive_entries(archive_json)
     memory = PublicationMemory(db_session)
     assert memory.is_seen(parsed_entries[0])
 
@@ -221,14 +242,10 @@ def test_agent_processes_multiple_unseen_newsletters_in_one_run(
     mock_email_sender_cls,
     db_session,
 ) -> None:
-    archive_html = """
-    <a href="/newsletter/newer">
-      <div>🤖 Newer newsletter 5/30/2026, 8:00:00 AM</div>
-    </a>
-    <a href="/newsletter/older">
-      <div>🤖 Older newsletter 5/29/2026, 8:00:00 AM</div>
-    </a>
-    """
+    archive_json = _archive_json(
+        ("Newer newsletter", "2026-05-30T08:00:00.000Z"),
+        ("Older newsletter", "2026-05-29T08:00:00.000Z"),
+    )
     newsletter_content = """
     # In Today's Signal
     Major AI launch today
@@ -239,7 +256,7 @@ def test_agent_processes_multiple_unseen_newsletters_in_one_run(
     """
 
     alphasignal = MagicMock()
-    alphasignal.fetch_archive_listing.return_value = archive_html
+    alphasignal.fetch_archive_listing.return_value = archive_json
     alphasignal.fetch_newsletter_content.return_value = newsletter_content
 
     summarizer = MagicMock()
@@ -258,7 +275,7 @@ def test_agent_processes_multiple_unseen_newsletters_in_one_run(
     assert result.email_sent_count == 2
     assert email_sender.send.call_count == 2
 
-    parsed_entries = parse_archive_entries(archive_html)
+    parsed_entries = parse_archive_entries(archive_json)
     memory = PublicationMemory(db_session)
     for entry in parsed_entries:
         assert memory.is_seen(entry)
@@ -276,21 +293,17 @@ def test_agent_skips_editions_before_start_date(
     mock_email_sender_cls,
     db_session,
 ) -> None:
-    archive_html = """
-    <a href="/newsletter/may">
-      <div>🤖 May newsletter 5/2/2026, 8:00:00 AM</div>
-    </a>
-    <a href="/newsletter/april">
-      <div>🤖 April newsletter 4/30/2026, 8:00:00 AM</div>
-    </a>
-    """
+    archive_json = _archive_json(
+        ("May newsletter", "2026-05-02T08:00:00.000Z"),
+        ("April newsletter", "2026-04-30T08:00:00.000Z"),
+    )
     newsletter_content = """
     # In Today's Signal
     Major AI launch today
     """
 
     alphasignal = MagicMock()
-    alphasignal.fetch_archive_listing.return_value = archive_html
+    alphasignal.fetch_archive_listing.return_value = archive_json
     alphasignal.fetch_newsletter_content.return_value = newsletter_content
 
     summarizer = MagicMock()
@@ -314,7 +327,7 @@ def test_agent_skips_editions_before_start_date(
     email_sender.send.assert_called_once()
     alphasignal.fetch_archive_listing.assert_called_once_with(start_date=date(2026, 5, 1))
 
-    parsed_entries = parse_archive_entries(archive_html)
+    parsed_entries = parse_archive_entries(archive_json)
     memory = PublicationMemory(db_session)
     may_entry = next(entry for entry in parsed_entries if "may" in entry.url)
     april_entry = next(entry for entry in parsed_entries if "april" in entry.url)
@@ -329,26 +342,21 @@ def test_agent_processes_only_unseen_entries_when_mixed(
     mock_email_sender_cls,
     db_session,
 ) -> None:
-    archive_html = """
-    <a href="/newsletter/seen">
-      <div>🤖 Seen newsletter 5/30/2026, 8:00:00 AM</div>
-    </a>
-    <a href="/newsletter/unseen">
-      <div>🤖 Unseen newsletter 5/29/2026, 8:00:00 AM</div>
-    </a>
-    """
+    archive_json = _archive_json(
+        ("Seen newsletter", "2026-05-30T08:00:00.000Z"),
+        ("Unseen newsletter", "2026-05-29T08:00:00.000Z"),
+    )
     newsletter_content = """
     # In Today's Signal
     Major AI launch today
     """
 
-    parsed_entries = parse_archive_entries(archive_html)
-    seen_url = "https://alphasignal.ai/newsletter/seen"
-    seen_entry = next(entry for entry in parsed_entries if entry.url == seen_url)
+    parsed_entries = parse_archive_entries(archive_json)
+    seen_entry = next(entry for entry in parsed_entries if "seen" in entry.title.lower())
     PublicationMemory(db_session).mark_seen(seen_entry)
 
     alphasignal = MagicMock()
-    alphasignal.fetch_archive_listing.return_value = archive_html
+    alphasignal.fetch_archive_listing.return_value = archive_json
     alphasignal.fetch_newsletter_content.return_value = newsletter_content
 
     summarizer = MagicMock()
@@ -366,8 +374,7 @@ def test_agent_processes_only_unseen_entries_when_mixed(
     assert result.processed_count == 1
     email_sender.send.assert_called_once()
 
-    unseen_url = "https://alphasignal.ai/newsletter/unseen"
-    unseen_entry = next(entry for entry in parsed_entries if entry.url == unseen_url)
+    unseen_entry = next(entry for entry in parsed_entries if "unseen" in entry.title.lower())
     memory = PublicationMemory(db_session)
     assert memory.is_seen(unseen_entry)
     assert memory.is_seen(seen_entry)
@@ -380,25 +387,21 @@ def test_agent_continues_after_partial_failure(
     mock_email_sender_cls,
     db_session,
 ) -> None:
-    archive_html = """
-    <a href="/newsletter/fail">
-      <div>🤖 Failing newsletter 5/29/2026, 8:00:00 AM</div>
-    </a>
-    <a href="/newsletter/success">
-      <div>🤖 Success newsletter 5/30/2026, 8:00:00 AM</div>
-    </a>
-    """
+    archive_json = _archive_json(
+        ("Failing newsletter", "2026-05-29T08:00:00.000Z"),
+        ("Success newsletter", "2026-05-30T08:00:00.000Z"),
+    )
     newsletter_content = """
     # In Today's Signal
     Major AI launch today
     """
 
-    parsed_entries = parse_archive_entries(archive_html)
+    parsed_entries = parse_archive_entries(archive_json)
     fail_entry = next(entry for entry in parsed_entries if "fail" in entry.url)
     success_entry = next(entry for entry in parsed_entries if "success" in entry.url)
 
     alphasignal = MagicMock()
-    alphasignal.fetch_archive_listing.return_value = archive_html
+    alphasignal.fetch_archive_listing.return_value = archive_json
 
     def fetch_side_effect(url: str) -> str:
         if url == fail_entry.url:
