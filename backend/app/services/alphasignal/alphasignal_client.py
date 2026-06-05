@@ -16,16 +16,39 @@ from backend.app.services.alphasignal.archive_parser import (
     parse_api_timestamp,
     sanitize_json_payload,
 )
+from backend.app.services.alphasignal.browserbase_fetcher import BrowserbaseFetcher
 from backend.app.services.tracing import traceable_step
 
 logger = logging.getLogger(__name__)
+
+_DEFAULT_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/131.0.0.0 Safari/537.36"
+    ),
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://alphasignal.ai/archive",
+}
 
 
 class AlphaSignalClient:
     """Fetch archive and newsletter content from AlphaSignal JSON APIs."""
 
-    def __init__(self, settings: Settings | None = None) -> None:
+    def __init__(
+        self,
+        settings: Settings | None = None,
+        browserbase_fetcher: BrowserbaseFetcher | None = None,
+    ) -> None:
         self.settings = settings or get_settings()
+        self._browserbase_fetcher = browserbase_fetcher
+
+    @property
+    def browserbase_fetcher(self) -> BrowserbaseFetcher:
+        if self._browserbase_fetcher is None:
+            self._browserbase_fetcher = BrowserbaseFetcher(settings=self.settings)
+        return self._browserbase_fetcher
 
     def _build_archive_api_url(self, page: int) -> str:
         """Build a paginated archive API URL from the configured archive API URL."""
@@ -36,6 +59,44 @@ class AlphaSignalClient:
             query["limit"] = [str(self.settings.alphasignal_archive_limit)]
         new_query = urlencode(query, doseq=True)
         return urlunparse(parsed._replace(query=new_query))
+
+    def _fetch_url_direct(self, url: str) -> str:
+        """Fetch a URL directly from the current host via httpx."""
+        response = httpx.get(
+            url,
+            timeout=30.0,
+            follow_redirects=True,
+            headers=_DEFAULT_HEADERS,
+        )
+        response.raise_for_status()
+        return response.text.strip()
+
+    def _fetch_url_browserbase(self, url: str) -> str:
+        """Fetch a URL via Browserbase-hosted Chromium."""
+        return self.browserbase_fetcher.fetch_url(url)
+
+    def _fetch_url(self, url: str) -> str:
+        """Fetch a URL using the configured retrieval mode."""
+        mode = self.settings.alphasignal_fetch_mode
+        if mode == "browserbase":
+            logger.info("Fetching AlphaSignal via Browserbase: %s", url)
+            return self._fetch_url_browserbase(url)
+
+        if mode == "auto":
+            try:
+                logger.info("Fetching AlphaSignal directly (auto mode): %s", url)
+                return self._fetch_url_direct(url)
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code != 403:
+                    raise
+                logger.warning(
+                    "Direct AlphaSignal fetch returned 403 for %s; falling back to Browserbase",
+                    url,
+                )
+                return self._fetch_url_browserbase(url)
+
+        logger.info("Fetching AlphaSignal directly: %s", url)
+        return self._fetch_url_direct(url)
 
     @staticmethod
     def _page_oldest_date(items: list[dict]) -> date | None:
@@ -59,9 +120,7 @@ class AlphaSignalClient:
         """Fetch archive listing JSON, paginating when needed for backfill."""
         first_url = self._build_archive_api_url(1)
         logger.info("Fetching AlphaSignal archive API: %s", first_url)
-        response = httpx.get(first_url, timeout=30.0, follow_redirects=True)
-        response.raise_for_status()
-        content = response.text.strip()
+        content = self._fetch_url(first_url)
 
         if not content.startswith("{"):
             return content
@@ -79,9 +138,8 @@ class AlphaSignalClient:
         while page <= total_pages:
             page_url = self._build_archive_api_url(page)
             logger.info("Fetching AlphaSignal archive API page %s: %s", page, page_url)
-            page_response = httpx.get(page_url, timeout=30.0, follow_redirects=True)
-            page_response.raise_for_status()
-            page_payload = json.loads(sanitize_json_payload(page_response.text.strip()))
+            page_content = self._fetch_url(page_url)
+            page_payload = json.loads(sanitize_json_payload(page_content))
             page_items = page_payload.get("data") or []
             if not page_items:
                 break
@@ -124,9 +182,8 @@ class AlphaSignalClient:
             )
         api_url = build_newsletter_api_url(campaign_id, self.settings.alphasignal_base_url)
         logger.info("Fetching AlphaSignal newsletter API: %s", api_url)
-        response = httpx.get(api_url, timeout=30.0, follow_redirects=True)
-        response.raise_for_status()
-        return self.unwrap_newsletter_api_response(response.text)
+        content = self._fetch_url(api_url)
+        return self.unwrap_newsletter_api_response(content)
 
     @staticmethod
     def unwrap_newsletter_api_response(content: str) -> str:

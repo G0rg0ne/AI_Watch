@@ -373,3 +373,33 @@ None
 
 ### Next Steps
 None
+
+## [2026-06-05 22:05] - FEATURE
+
+### Changes
+- Added optional Browserbase-backed AlphaSignal retrieval for production VPS deployments (Hetzner/Dokploy)
+- Introduced `ALPHASIGNAL_FETCH_MODE` with `direct`, `browserbase`, and `auto` modes
+- Added Browserbase configuration settings (`BROWSERBASE_API_KEY`, `BROWSERBASE_PROJECT_ID`, region, proxy, session timeout)
+- Created `BrowserbaseFetcher` using Browserbase SDK + Playwright CDP to fetch AlphaSignal API URLs inside hosted Chromium sessions
+- Routed archive and newsletter fetches through a shared `_fetch_url` helper with browser-like direct HTTP headers
+- Added unit tests for fetch mode routing, auto 403 fallback, and Browserbase configuration errors
+- Documented Browserbase env vars and Dokploy deployment guidance in README and `.env.example`
+
+### Files Modified
+- `backend/app/core/config.py`
+- `backend/requirements.txt`
+- `backend/app/services/alphasignal/browserbase_fetcher.py`
+- `backend/app/services/alphasignal/alphasignal_client.py`
+- `tests/backend/test_alphasignal_fetch_modes.py`
+- `.env.example`
+- `README.md`
+
+### Rationale
+AlphaSignal returns `403 Forbidden` when called directly from Hetzner datacenter IPs. Browserbase-hosted browser sessions avoid that block while keeping the existing parser, dedup, summarizer, and email pipeline unchanged.
+
+### Breaking Changes
+None
+
+### Next Steps
+- Publish a new Docker image tag and set `ALPHASIGNAL_FETCH_MODE=browserbase` in Dokploy
+- Verify a manual `POST /run-now` succeeds and LangSmith traces show Browserbase fetch steps

@@ -2,9 +2,12 @@
 
 from datetime import date
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+AlphaSignalFetchMode = Literal["direct", "browserbase", "auto"]
 
 
 class Settings(BaseSettings):
@@ -33,6 +36,14 @@ class Settings(BaseSettings):
     alphasignal_archive_api_url: str = "https://alphasignal.ai/api/archive?page=1&limit=10"
     alphasignal_archive_limit: int = Field(default=10, ge=1, le=100)
     alphasignal_start_date: date | None = None
+    alphasignal_fetch_mode: AlphaSignalFetchMode = "direct"
+
+    # Browserbase (production retrieval when AlphaSignal blocks datacenter IPs)
+    browserbase_api_key: str | None = None
+    browserbase_project_id: str | None = None
+    browserbase_region: str | None = None
+    browserbase_use_proxy: bool = True
+    browserbase_session_timeout_seconds: int = Field(default=120, ge=60, le=21600)
 
     @field_validator("alphasignal_start_date", mode="before")
     @classmethod

@@ -9,7 +9,7 @@ Daily AI/ML news agent that monitors the [AlphaSignal archive](https://alphasign
 | Runtime | Python 3.11 |
 | API / Health | FastAPI + Uvicorn |
 | Scheduler | APScheduler (internal daily cron) |
-| Web retrieval | httpx (AlphaSignal JSON APIs) |
+| Web retrieval | httpx (direct) or Browserbase + Playwright (production) |
 | Summarization | OpenAI |
 | Observability | LangSmith |
 | Memory | SQLite (persistent dedup) |
@@ -42,10 +42,10 @@ AI_Watch/
 ## How It Works
 
 1. **Daily scheduler** triggers the agent at the configured UTC time.
-2. **httpx** fetches the AlphaSignal archive JSON API (paginated when `ALPHASIGNAL_START_DATE` is set for backfill).
+2. **AlphaSignal client** fetches the archive JSON API via direct `httpx` or Browserbase-hosted Chromium (paginated when `ALPHASIGNAL_START_DATE` is set for backfill).
 3. **Archive parser** extracts publication title, URL, and datetime from each row.
 4. **Memory (SQLite)** finds every unseen publication on or after the optional start date.
-5. For each eligible edition (oldest first), **httpx** fetches the newsletter JSON API (`/api/archive/{campaign_id}`) and unwraps embedded HTML.
+5. For each eligible edition (oldest first), the client fetches the newsletter JSON API (`/api/archive/{campaign_id}`) and unwraps embedded HTML.
 6. **Newsletter parser** extracts highlight titles, detailed summaries/resumes, and detail links.
 7. **LangSmith** supplies the summarization chat prompt; **OpenAI** generates an email-ready digest.
 8. **SMTP** sends one email per edition and each publication is stored in memory only after its email succeeds.
@@ -201,6 +201,12 @@ The top-level `alphasignal_agent_run` trace includes a `trigger` input so runs a
 | `ALPHASIGNAL_ARCHIVE_API_URL` | No | Canonical archive listing API URL; all paginated requests derive from this URL (default: `https://alphasignal.ai/api/archive?page=1&limit=10`) |
 | `ALPHASIGNAL_ARCHIVE_LIMIT` | No | Default page size when `limit` is omitted from `ALPHASIGNAL_ARCHIVE_API_URL` (default: `10`) |
 | `ALPHASIGNAL_START_DATE` | No | Only process editions with `published_at` on/after this date (`YYYY-MM-DD`, UTC date-only). Unset = no cutoff; all unseen editions are eligible |
+| `ALPHASIGNAL_FETCH_MODE` | No | Retrieval mode: `direct` (default), `browserbase`, or `auto` (direct first, Browserbase on 403) |
+| `BROWSERBASE_API_KEY` | When using Browserbase | Browserbase API key for hosted Chromium sessions |
+| `BROWSERBASE_PROJECT_ID` | No | Browserbase project id (recommended in production) |
+| `BROWSERBASE_REGION` | No | Browserbase session region (for example `us-west-2`) |
+| `BROWSERBASE_USE_PROXY` | No | Enable Browserbase default proxy (default: `true`) |
+| `BROWSERBASE_SESSION_TIMEOUT_SECONDS` | No | Browserbase session timeout in seconds (default: `120`, min `60`, max `21600`) |
 | `DATABASE_URL` | No | SQLite URL (default: `/data/ai_watch.db` in Docker) |
 | `SMTP_HOST` | Yes | SMTP server host |
 | `SMTP_PORT` | No | SMTP port (default: `587`) |
@@ -231,11 +237,13 @@ pip install -r backend/requirements.txt
 pytest
 ```
 
-Tests cover archive parsing, newsletter parsing, summarizer OpenAI calls, memory deduplication, batch multi-edition agent runs, start-date filtering, and agent skip/process flows (mocked AlphaSignal client, OpenAI, SMTP).
+Tests cover archive parsing, newsletter parsing, summarizer OpenAI calls, memory deduplication, batch multi-edition agent runs, start-date filtering, AlphaSignal fetch mode routing (direct/browserbase/auto), and agent skip/process flows (mocked AlphaSignal client, OpenAI, SMTP).
 
 ## Deployment Notes
 
 - Mount a persistent volume at `/data` so publication memory survives restarts.
+- On VPS providers such as Hetzner, AlphaSignal may return `403 Forbidden` for direct server-side HTTP requests. Set `ALPHASIGNAL_FETCH_MODE=browserbase` (or `auto`) and provide `BROWSERBASE_API_KEY` plus `BROWSERBASE_PROJECT_ID` in Dokploy.
+- Browserbase runs AlphaSignal fetches inside hosted Chromium sessions; the Dokploy container only orchestrates the agent and does not need a local browser install.
 - Inject secrets via environment variables or a secrets manager; never bake them into the image.
 - LangSmith traces are available when `LANGCHAIN_API_KEY` is set.
 - Summarization prompts are pulled from LangSmith at runtime; create the prompt in Prompt Hub before the first successful digest run.
